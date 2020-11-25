@@ -15,9 +15,11 @@ In this project, we use followed
   - [DECIPHER](https://bioconductor.org/packages/release/bioc/html/DECIPHER.html)
   - [phyloseq](https://joey711.github.io/phyloseq/)
   - [ggplot2](https://ggplot2.tidyverse.org/)
+  - [ggpubr](https://rpkgs.datanovia.com/ggpubr/)
   - [ape](https://cran.r-project.org/web/packages/ape/index.html)
   - [plyr](https://www.rdocumentation.org/packages/plyr/versions/1.8.6)
   - [dplyr](https://dplyr.tidyverse.org/)
+  - [DESeq2](http://bioconductor.org/packages/release/bioc/html/DESeq2.html)
 
 -----
 
@@ -32,9 +34,11 @@ library(Biostrings)
 library(DECIPHER)
 library(phyloseq)
 library(ggplot2)
+library(ggpubr)
 library(ape)
 library(plyr)
 library(dplyr)
+library(DESeq2)
 
 source('functions.R')
 
@@ -382,3 +386,60 @@ beta_plot(ps, "bray", "Source")
 ```
 
 ![](readme_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+
+## Differential abundance
+
+Here we try to find ASVs, which abundance significantly different in
+comparison within two groups. For that, we will use DeSEQ2 package. In
+this function, we perform comparison of two groups and return table of
+ASVs, significantly different from each other (p-adj \< 0.05) alongside
+DeSEQ2 metrics.
+
+`sig_table(ps_object, formula)`
+
+  - `ps_object` - phyloseq object
+  - `formula` - formula ~var\_name for grouping dataset (in our case -
+    ~Source)
+  - return dataframe of ASVs, their parameters in DeSEQ2 comparison and
+    taxonomy
+
+`draw_sig_table(sig_table, taxa)`
+
+  - `sig_table` - table of significant ASVs (log2FoldChange and baseMean
+    columns will be used)
+  - `taxa` - taxonomical level of plot
+
+<!-- end list -->
+
+``` r
+table <- sig_table(ps, ~Source)
+table[1:6,1:9]
+```
+
+    ##         baseMean log2FoldChange    lfcSE      stat       pvalue         padj
+    ## ASV53  47.030396      -8.722404 1.735541 -5.025754 5.014587e-07 1.023909e-05
+    ## ASV218 17.227553       7.832519 1.854443  4.223651 2.403759e-05 1.893193e-04
+    ## ASV86  33.711690      -5.877835 1.410739 -4.166493 3.093216e-05 2.282221e-04
+    ## ASV606  4.806288      -5.430473 2.262743 -2.399951 1.639725e-02 3.037296e-02
+    ## ASV671  4.217089      -5.241059 2.352359 -2.228002 2.588038e-02 4.367696e-02
+    ## ASV438  7.297535      -6.035306 2.088734 -2.889456 3.859087e-03 9.359885e-03
+    ##         Kingdom          Phylum            Class
+    ## ASV53  Bacteria Verrucomicrobia Verrucomicrobiae
+    ## ASV218 Bacteria     Chloroflexi     Anaerolineae
+    ## ASV86  Bacteria           WPS-2             <NA>
+    ## ASV606 Bacteria   Acidobacteria   Acidobacteriia
+    ## ASV671 Bacteria Patescibacteria  Saccharimonadia
+    ## ASV438 Bacteria   Acidobacteria   Acidobacteriia
+
+``` r
+draw_sig_table(table, 'Phylum')
+```
+
+![](readme_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+
+-----
+
+## Networks
+
+This part is under construction. Feel free to see `drafts.R` for any
+interesting information
