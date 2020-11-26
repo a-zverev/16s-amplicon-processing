@@ -1,7 +1,7 @@
 
 ## Intro
 
-This pipline offers first trying to standartize procedure of 16s
+This pipline offers first trying to standartise procedure of soil 16s
 amplicone sequences Illumina reads processing. Most operations performed
 by several libraries and covered in functions. There we will talk about
 most common way of analysis - but for tune or more details, please, feel
@@ -27,6 +27,10 @@ In this project, we use followed
 
 Load requred libraries. Please, install them, if you don\`t have it.
 Also, import functions and set your working directory.
+
+In our test data, we will see at microbiomes of sandy soils. In this
+case, we compare sand with frost inclusion on an abandoned shooting
+range and self-grown sands (called Anclav).
 
 ``` r
 library(dada2)
