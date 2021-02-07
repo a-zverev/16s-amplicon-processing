@@ -86,14 +86,14 @@ normalize_phyloseq <- function(ps_object, method='rarefaction'){
 
 
 # Draw barplot of relative abundance by taxa level
-bargraph <- function(ps_object, rank, threshold){
-  ph_ps <- tax_glom(ps_object, taxrank = rank)
-  physeq3 = transform_sample_counts(ph_ps, function(x) x / sum(x) )
+bargraph <- function(ps, rank, threshold){
   
-  data <- psmelt(physeq3) # create dataframe from phyloseq object
+  ps2 <- tax_glom(ps, taxrank = rank)
+  ps3 = transform_sample_counts(ps2, function(x) x / sum(x) )
+  data <- psmelt(ps3) # create dataframe from phyloseq object
   data$Plot <- as.character(data[,rank]) #convert to character
   data$Plot[data$Abundance < threshold] <- paste0("<", threshold, " abund.")
-  medians <- ddply(data, ~Plot, function(x) c(median=median(x$Abundance)))
+  medians <- data %>% group_by(Plot) %>% mutate(median=median(data$Abundance))
   remainder <- medians[medians$median <= threshold,]$Plot
   p <- ggplot(data=data, aes(x=Sample, y=Abundance, fill=Plot))
   p + geom_bar(aes(), stat="identity", position="stack") + theme_light() +
