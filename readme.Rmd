@@ -1,0 +1,283 @@
+---
+title: ""
+output: 
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Intro
+
+This pipline offers first trying to standartise procedure of soil 16s amplicone sequences Illumina reads processing. Most operations performed by several libraries and covered in functions. There we will talk about most common way of analysis - but for tune or more details, please, feel free to read and rewrite specific function.
+
+In this project, we use followed libraries:
+
+* [dada2](https://benjjneb.github.io/dada2/tutorial.html)
+* [Biostrings](https://bioconductor.org/packages/release/bioc/html/Biostrings.html)
+* [DECIPHER](https://bioconductor.org/packages/release/bioc/html/DECIPHER.html)
+* [phyloseq](https://joey711.github.io/phyloseq/)
+* [ggplot2](https://ggplot2.tidyverse.org/)
+* [ggpubr](https://rpkgs.datanovia.com/ggpubr/)
+* [ape](https://cran.r-project.org/web/packages/ape/index.html)
+* [plyr](https://www.rdocumentation.org/packages/plyr/versions/1.8.6)
+* [dplyr](https://dplyr.tidyverse.org/)
+* [DESeq2](http://bioconductor.org/packages/release/bioc/html/DESeq2.html)
+
+
+---
+
+## Libraries and functions import
+
+Load requred libraries. Please, install them, if you don`t have it. Also, import functions and set your working directory.
+
+In our test data, we will see at microbiomes of sandy soils. In this case, we compare sand with frost inclusion on an abandoned shooting range and self-grown sands (called Anclav).
+
+```{r message=FALSE, warning=FALSE}
+library(dada2)
+library(Biostrings)
+library(DECIPHER)
+library(phyloseq)
+library(ggplot2)
+library(ggpubr)
+library(ape)
+library(plyr)
+library(dplyr)
+library(DESeq2)
+
+source('functions.R')
+
+setwd('/home/alexey/Analysis/16s-amplicon-processing/')
+```
+
+
+---
+
+## Dada2 processing of sequences
+
+For processing of data, we need specify a way to raw data, and file with metadata (information about samples). In our example, raw files are in `raw` directory, and metadata in `metadata.csv` file.
+
+Functions in this module are:
+
+`dada2_processing(raw_files_path, cores=TRUE, trimLeft = c(19, 20)`
+
+* `raw_files_path` - source .fastq.gz files.
+* `cores` - number of cores for analysis. Use TRUE for all availible
+* `trimLeft` - if you want to cut primers from ends, use this variable as vector - c(len_forward, len_reverse)
+* return table of ASV and their abundance in samples
+
+`rename_by_metadata(seqtab, mdat)`
+
+* `seqtab` - table of ASV to rename
+* `mdat` - metadata dataframe (use Filename column for basenames of raw files)
+* return ASV-table with renamed samples
+
+`dada2_assign_taxonomy(seqtab, set_train_path, train_set_species_path, cores = TRUE)`
+
+* `set_train_path` - way to trained SILVA database fastas (see more in dada2 pipeline [here](https://benjjneb.github.io/dada2/tutorial.html))
+* `train_set_species_path` - way to SILVA species fastas (see more in dada2 pipeline [here](https://benjjneb.github.io/dada2/tutorial.html))
+* `cores` - number of cores for analysis. Use TRUE for all availible
+* return taxonomy table
+
+
+```{r cache=TRUE}
+
+mdat <- read.csv('metadata.csv', sep = '\t')
+rownames(mdat) <- mdat$SampleID
+mdat
+
+
+seqtab <- dada2_processing_reads(raw_files_path = 'raw')
+seqtab <- rename_by_metadata(seqtab, mdat)
+
+taxa <- dada2_assign_taxonomy(seqtab = seqtab, set_train_path = '/home/alexey/tax_n_refs/silva_nr_v132_train_set.fa.gz', 
+                           train_set_species_path = '/home/alexey/tax_n_refs/silva_species_assignment_v132.fa.gz')
+
+```
+
+
+---
+
+## Create phyloseq object, add tree information to phyloseq object
+
+There we create phyloseq object, which contain all data about our dataset. Be sure, that names of all components are equal.
+
+```{r}
+ps <- phyloseq(otu_table(seqtab, taxa_are_rows=FALSE), 
+               sample_data(mdat), 
+               tax_table(taxa))
+
+ps
+
+```
+
+Also at this step we export fasta file with sequences for each ASV and include tree info in a phtloseq object. We do not perform tree construction in R due to unsufficiently effective alghoritmes, and recommend you to perform it using Fasttree implementation in QIIME2 package.
+
+`create_ASV_references(ps_object, write = TRUE)`
+
+* `ps_object` - phyloseq-object
+* `write` - if True, write a `refseqs.fasta` file with reference fasta for every ASV
+* return ps_object with references and ASV__ as name of ASVs
+
+
+```{r}
+ps <- create_ASV_references(ps)
+
+tree <- read_tree('tree.nwk')
+ps <- merge_phyloseq(ps, phy_tree(tree))
+
+ps
+
+```
+
+
+---
+
+## Basic stats and save data
+
+Feel free to explore our data and understand, how many taxa we have, or reads per sample number. Also save phyloseq object to file.
+
+```{r}
+sample_names(ps) # Names of samples
+rank_names(ps) # Taxonomy ranks
+
+sample_sums(ps) # Sum of reads per sample
+
+
+tax_table(ps)[1:5, 1:4] # Taxonomy table
+otu_table(ps)[1:4, 1:5] # ASV table
+
+saveRDS(ps, "ps.RData")
+```
+
+
+---
+
+## Normalisation
+
+Normalisation of data is a matter of discussions, but there we have an opportunity to do it. Now we have relative and simple rarefaction as an options, but in future we will perform varstab and log-relative normalization
+
+`normaize_phyloseq(ps_object, method='rarefaction')`
+
+* `ps_object` - phyloseq-object
+* `method` - method of normalisation. Current options are: "rarefaction", "relative"
+* return phyloseq object with normalized data
+
+
+```{r}
+ps.n <- normalize_phyloseq(ps, method='rarefaction')
+```
+
+
+---
+
+## Bargraphs
+
+This function draw a bargraph of relative abundance of different taxa in a dataset. Also result is a ggplot-object, so, it is possible add to result facet grid for group from metadata
+
+`bargraphps_object, rank, threshold=0.05)`
+
+* `ps_object` - phyloseq-object
+* `rank` - taxonomical level for drawing
+* `threshold` - taxa with abundanse less than a threshold will be grouped in "less than" category
+* return ggplot graph
+
+
+```{r}
+bargraph(ps, 'Phylum', 0.03)
+
+bargraph(ps, 'Phylum', 0.03) + facet_grid(~ Source, scale = 'free_x')
+```
+
+
+## Alpha diversity
+
+This functions calculate alpha-diversity of samples, and draw it on a plot
+
+`alpha_div(ps, metric, group)`
+
+* `ps` - phyloseq object
+* `metric` - group of metrics. Correct values are "Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher" or their group
+* `group` - specify a column from metadata to add to alpha diversity table
+* return dataframe vith alpha-diversity indices
+
+
+`plot_alpha(ps, metric, group)`
+
+* `ps` - phyloseq object
+* `metric` - metric. Correct value is one from "Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"
+* `group` - specify a column from metadata to group values
+* return ggplot boxplot with points of exact values
+ 
+
+```{r}
+alpha_div(ps.n, c("Observed", "Simpson", "Shannon"), "Source")
+
+
+ggarrange(plot_alpha(ps.n, "Observed", "Source"),
+          plot_alpha(ps.n, "Simpson", "Source"), plot_alpha(ps.n, "Shannon", "Source"),
+          nrow = 1, ncol = 3)
+
+```
+
+
+---
+
+## Beta diversity
+
+Short functiot to draw beta diversity plot
+
+`beta_plot(ps, metric, group, method='PCoA')`
+
+* `ps` - phyloseq object
+* `metric` - metric. Correct value is one from "bray", "wunifrac", "unifrac"
+* `group` - specify a column from metadata to group by color
+* `method` - method of ordination. Values are "PCoA", "NMDS"
+* return ggplot scatterplot with distances between samples
+
+
+```{r}
+beta_plot <- function(ps, metric, group, method='PCoA'){
+  ps.prop <- transform_sample_counts(ps, function(x) x/sum(x))
+  ord.nmds.bray <- ordinate(ps.prop, method=method, distance=metric)
+  plot_ordination(ps.prop, ord.nmds.bray, color = group, title=metric) +
+    geom_point(size=3, alpha=0.7) + labs() +
+    theme_light()
+}
+
+beta_plot(ps, "bray", "Source")
+```
+
+
+## Differential abundance
+
+Here we try to find ASVs, which abundance significantly different in comparison within two groups. For that, we will use DeSEQ2 package. In this function, we perform comparison of two groups and return table of ASVs, significantly different from each other (p-adj < 0.05) alongside DeSEQ2 metrics.
+
+`sig_table(ps_object, formula)`
+
+* `ps_object` - phyloseq object
+* `formula` - formula ~var_name for grouping dataset (in our case - ~Source)
+* return dataframe of ASVs, their parameters in DeSEQ2 comparison and taxonomy
+
+
+`draw_sig_table(sig_table, taxa)`
+
+* `sig_table` - table of significant ASVs (log2FoldChange and baseMean columns will be used)
+* `taxa` - taxonomical level of plot
+
+
+```{r message=FALSE, warning=FALSE}
+table <- sig_table(ps, ~Source)
+table[1:6,1:9]
+
+
+draw_sig_table(table, 'Phylum')
+```
+
+---
+
+## Networks
+
+This part is under construction. Feel free to see `drafts.R` for any interesting information
