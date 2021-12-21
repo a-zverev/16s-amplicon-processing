@@ -83,18 +83,24 @@ Functions in this module are:
 
 
 ```{r cache=TRUE}
+# read metadata from mapfile
+mdat <- read_metadata('metadata.csv', "SampleID", sep = '\t')
 
-mdat <- read.csv('metadata.csv', sep = '\t')
-rownames(mdat) <- mdat$SampleID
-mdat
+# dada2 pipeline follows to sequence table
+seqtab <- reads_to_seqtable_by_dada2(raw_files_path = 'raw', trimLeft = c(19, 20), truncLen=c(220,180))
 
+# rename sequence table by our names
+seqtab2 <- rename_seqtab_by_metadata(seqtab, mdat, "Filename")
 
-seqtab <- dada2_processing_reads(raw_files_path = 'raw')
-seqtab <- rename_by_metadata(seqtab, mdat)
-
-taxa <- dada2_assign_taxonomy(seqtab = seqtab, set_train_path = '/home/alexey/tax_n_refs/silva_nr_v132_train_set.fa.gz', 
+# assign taxonomy
+taxa <- assign_taxonomy(seqtab = seqtab2, set_train_path = '/home/alexey/tax_n_refs/silva_nr_v132_train_set.fa.gz', 
                            train_set_species_path = '/home/alexey/tax_n_refs/silva_species_assignment_v132.fa.gz')
 
+# combine a plyloseq object (without a tree)
+ps <- assemble_phyloseq(seqtab = seqtab2, metadata = mdat, taxonomy = taxa, filter.organells = T, write_fasta = F)
+
+# root the tree and add to the phyloseq object
+ps <- add_tree_to_ps(ps, tree)
 ```
 
 

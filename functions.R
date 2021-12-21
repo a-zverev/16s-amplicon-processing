@@ -3,79 +3,164 @@ library(Biostrings)
 library(DECIPHER)
 library(phyloseq)
 library(ggplot2)
+library(data.table)
 library(ape)
-library(plyr)
 library(dplyr)
 library(DESeq2)
 
-dada2_processing_reads <- function(raw_files_path, cores=TRUE, trimLeft = c(19, 20)){
+# dada2 pipeline follows to sequence table
+reads_to_seqtable_by_dada2 <- function(raw_files_path, trimLeft, truncLen,
+                                   pool=TRUE, cores=TRUE){
+  require(dada2)
   
-  #following dada2 pipeline
+  # following dada2 pipeline
   fnFs <- sort(list.files(raw_files_path, pattern="_R1_001.fastq", full.names = TRUE))
   fnRs <- sort(list.files(raw_files_path, pattern="_R2_001.fastq", full.names = TRUE))
   sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
   
+  # show some info about data
   print(sample.names)
+  print(plotQualityProfile(fnRs, aggregate = T))
+  print(plotQualityProfile(fnRs, aggregate = T))
   
   filtFs <- file.path(raw_files_path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
   filtRs <- file.path(raw_files_path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
   
-  out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(220,180), 
+  # trim data
+  out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=truncLen, 
                        trimLeft=trimLeft, maxN=0, maxEE=c(2,5), 
                        rm.phix=TRUE, compress=TRUE, multithread=cores)
   
+  # error rates
   errF <- learnErrors(filtFs, multithread=cores)
   errR <- learnErrors(filtRs, multithread=cores)
   
-  derepFs <- derepFastq(filtFs, verbose=TRUE)
-  derepRs <- derepFastq(filtRs, verbose=TRUE)
+  # dereplication
+  derepFs <- derepFastq(filtFs, verbose=F)
+  derepRs <- derepFastq(filtRs, verbose=F)
   
   names(derepFs) <- sample.names
   names(derepRs) <- sample.names
   
-  dadaFs <- dada(derepFs, err=errF, multithread=cores, pool=TRUE)
-  dadaRs <- dada(derepRs, err=errR, multithread=cores, pool=TRUE)
-  
+  # apply error rate and merge
+  dadaFs <- dada(derepFs, err=errF, multithread=cores, pool=pool)
+  dadaRs <- dada(derepRs, err=errR, multithread=cores, pool=pool)
   mergers <- mergePairs(dadaFs, derepFs, dadaRs, derepRs, verbose=TRUE)
   seqtab <- makeSequenceTable(mergers)
   
+  # get some stats
   dim(seqtab)
   table(nchar(getSequences(seqtab)))
   getN <- function(x) sum(getUniques(x))
   seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=cores, verbose=TRUE)
   
+  # logs
+  
+  getN <- function(x) sum(getUniques(x))
+  track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab.nochim))
+  colnames(track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
+  rownames(track) <- sample.names
+  print(track)
+  write.csv(track, "processing.log")
+  
   return(seqtab.nochim)
 }
 
+# read metadata from mapfile
+read_metadata <- function(filename, sample.names, ...){
+  
+  # read metadata and pass names of samples to rownames
+  metadata <- read.csv(filename, ...)
+  rownames(metadata) <- metadata[,sample.names]
+  metadata
+}
 
-dada2_assign_taxonomy <- function(seqtab, set_train_path, train_set_species_path, cores = TRUE){
+# assign taxonomy
+assign_taxonomy <- function(seqtab, set_train_path, train_set_species_path, cores = TRUE){
+  require(dada2)
+  
   taxa.dada2 <- assignTaxonomy(seqtab, set_train_path , multithread=cores)
   taxa.dada2 <- addSpecies(taxa.dada2, train_set_species_path)
-  
   return(taxa.dada2)
 }
 
-
-rename_by_metadata <- function(seqtab, metadata){
-  rownames(metadata) <-metadata$SampleID
-  metadata <- metadata %>% arrange(factor(Filename, levels = rownames(seqtab)))
-  if (all(metadata$Filename == rownames(seqtab))) {
+# rename sequence table by our names
+rename_seqtab_by_metadata <- function(seqtab, metadata, old.names){
+  require(dplyr)
+  
+  # sort metadata by %seqtab% rownames order
+  metadata <- metadata %>% arrange(factor(metadata[,old.names], levels = rownames(seqtab)))
+  
+  # if names of %seqtab% and %old.names% equal and in correct order, rename
+  if (all(metadata[,old.names] == rownames(seqtab))) {
     rownames(seqtab) <- rownames(metadata)
   } else {print('Wrong column names')}
   return(seqtab)
 }
 
-
-create_ASV_references <- function(ps_object, write = TRUE){
+# combine a plyloseq object (without a tree)
+assemble_phyloseq <- function(seqtab, metadata, taxonomy, filter.organells = T, write_fasta = TRUE){
+  require(Biostrings)
+  require(phyloseq)
+  require(dplyr)
+  
+  # create phyloseq
+  ps_object <- phyloseq(otu_table(seqtab, taxa_are_rows=FALSE), 
+                 sample_data(metadata), 
+                 tax_table(taxa))
+  
+  # move references from %ps_object% taxa names to dedicated data
   dna <- Biostrings::DNAStringSet(taxa_names(ps_object))
   names(dna) <- taxa_names(ps_object)
   ps_object <- merge_phyloseq(ps_object, dna)
   taxa_names(ps_object) <- paste0("ASV", seq(ntaxa(ps_object)))
-  if (write == TRUE){
+  
+  # write fastas, if required
+  if (write_fasta == TRUE){
     writeXStringSet(ps_object@refseq, format = 'fasta', filepath = 'refseqs.fasta')
+  }
+  
+  # filter mitochondria and chloroplasts, if requied. NA protected by masking
+  if (filter.organells == TRUE){
+    # ps_object@tax_table <- tidyr::replace_na(ps_object@tax_table, TRUE)
+    ps_object@tax_table[is.na(ps_object@tax_table)] <- TRUE
+    ps_object <- subset_taxa(ps_object,
+                      !(Family  == "Mitochondria" |
+                          Class   == "Chloroplast" |
+                          Order   == "Chloroplast"))
+    ps_object@tax_table <- dplyr::na_if(ps_object@tax_table, TRUE)
   }
   return(ps_object)
 }
+
+# root the tree and add to ps object
+add_tree_to_ps <- function(ps, tree){
+  require(phyloseq)
+  require(ape)
+  require(data.table)
+  
+  # find longest branch and return it's label
+  pick_new_outgroup <- function(tree.unrooted){
+    # tablify parts of tree that we need.
+    treeDT <- 
+      cbind(
+        data.table(tree.unrooted$edge),
+        data.table(length = tree.unrooted$edge.length)
+      )[1:Ntip(tree.unrooted)] %>% 
+      cbind(data.table(id = tree.unrooted$tip.label))
+    # Take the longest terminal branch as outgroup
+    new.outgroup <- treeDT[which.max(length)]$id
+    return(new.outgroup)
+  }
+  
+  m.fasttree <- read_tree(tree)
+  m.fasttree <- ape::root(m.fasttree, outgroup=pick_new_outgroup(m.fasttree), resolve.root=TRUE)
+  
+  ps <- merge_phyloseq(ps, phy_tree(m.fasttree))
+}
+
+
+
 
 
 # Normalise data
