@@ -1,13 +1,37 @@
+---
+title: "Base R template for 16s amplicon processing"
+output: html_notebook
+---
+
+```{r}
 library(dada2)
 library(Biostrings)
 library(DECIPHER)
 library(phyloseq)
 library(ggplot2)
-library(data.table)
+library(ggpubr)
 library(ape)
 library(dplyr)
 library(DESeq2)
 
+set.seed(5678)
+setwd('/path/')
+```
+
+## Processing
+
+```{r}
+# Read metadata from mapfile
+read_metadata <- function(filename, sample.names, ...){
+  
+  # read metadata and pass names of samples to rownames
+  metadata <- read.csv(filename, ...)
+  rownames(metadata) <- metadata[,sample.names]
+  metadata
+}
+```
+
+```{r}
 # Dada2 pipeline follows to sequence table
 reads_to_seqtable_by_dada2 <- function(raw_files_path, trimLeft, truncLen,
                                    pool=TRUE, cores=TRUE){
@@ -66,14 +90,6 @@ reads_to_seqtable_by_dada2 <- function(raw_files_path, trimLeft, truncLen,
   return(seqtab.nochim)
 }
 
-# Read metadata from mapfile
-read_metadata <- function(filename, sample.names, ...){
-  
-  # read metadata and pass names of samples to rownames
-  metadata <- read.csv(filename, ...)
-  rownames(metadata) <- metadata[,sample.names]
-  metadata
-}
 
 # Assign taxonomy
 assign_taxonomy <- function(seqtab, set_train_path, train_set_species_path, cores = TRUE){
@@ -83,6 +99,8 @@ assign_taxonomy <- function(seqtab, set_train_path, train_set_species_path, core
   taxa.dada2 <- addSpecies(taxa.dada2, train_set_species_path)
   return(taxa.dada2)
 }
+
+
 
 # Rename sequence table by our names
 rename_seqtab_by_metadata <- function(seqtab, metadata, old.names){
@@ -97,6 +115,7 @@ rename_seqtab_by_metadata <- function(seqtab, metadata, old.names){
   } else {print('Wrong column names')}
   return(seqtab)
 }
+
 
 # Combine a plyloseq object (without a tree)
 assemble_phyloseq <- function(seqtab, metadata, taxonomy, filter.organells = T, write_fasta = TRUE){
@@ -124,7 +143,7 @@ assemble_phyloseq <- function(seqtab, metadata, taxonomy, filter.organells = T, 
   if (filter.organells == TRUE){
     
     # filter non-attributed
-    ps_object <- subset_taxa(ps_object, Phylum != "NA")
+    ps <- subset_taxa(ps, Phylum != "NA")
     
     ps_object@tax_table[is.na(ps_object@tax_table)] <- TRUE
     ps_object <- subset_taxa(ps_object,
@@ -136,32 +155,11 @@ assemble_phyloseq <- function(seqtab, metadata, taxonomy, filter.organells = T, 
   return(ps_object)
 }
 
-# # Root the tree and add to ps object
-# add_tree_to_ps <- function(ps, tree){
-#   require(phyloseq)
-#   require(ape)
-#   require(data.table)
-#   
-#   # find longest branch and return it's label
-#   pick_new_outgroup <- function(tree.unrooted){
-#     # tablify parts of tree that we need.
-#     treeDT <- 
-#       cbind(
-#         data.table(tree.unrooted$edge),
-#         data.table(length = tree.unrooted$edge.length)
-#       )[1:Ntip(tree.unrooted)] %>% 
-#       cbind(data.table(id = tree.unrooted$tip.label))
-#     # Take the longest terminal branch as outgroup
-#     new.outgroup <- treeDT[which.max(length)]$id
-#     return(new.outgroup)
-#   }
-#   
-#   m.fasttree <- read_tree(tree)
-#   m.fasttree <- ape::root(m.fasttree, outgroup=pick_new_outgroup(m.fasttree), resolve.root=TRUE)
-#   
-#   ps <- merge_phyloseq(ps, phy_tree(m.fasttree))
-# }
+```
 
+## EDA
+
+```{r}
 # Draw barplot of relative abundance by taxa level
 bargraph <- function(ps, rank, threshold=0.05){
   require(dplyr)
@@ -191,7 +189,9 @@ bargraph <- function(ps, rank, threshold=0.05){
     theme(legend.position="bottom") + guides() +
     theme(axis.text.x = element_text(angle = 90))
 }
+```
 
+```{r}
 # Calculate several alpha-diversity indexes, return one dataframe
 alpha_div_table <- function(ps, metric, group){
   require(phyloseq)
@@ -218,7 +218,9 @@ plot_alpha <- function(ps, group, metric) {
     labs(y=paste(metric, "index")) +
     ggtitle(metric)
 }
+```
 
+```{r}
 # Plot beta-diversity
 beta_plot <- function(ps, method, distance, ...){
   require(phyloseq)
@@ -230,7 +232,11 @@ beta_plot <- function(ps, method, distance, ...){
     geom_point(size=3, alpha=0.7) + 
     theme_light()
 }
+```
 
+## DeSEQ
+
+```{r}
 # Gets table of significant differs from ps and formula
 sig_table <- function(ps, formula, threshold){
   require(DESeq2)
@@ -254,7 +260,9 @@ sig_table <- function(ps, formula, threshold){
   )
   return(sigtab)
 }
+```
 
+```{r}
 # Draw a plot by %sig_table% data
 draw_sig_table <- function(sig_table, rank){
   require(ggplot2)
@@ -281,7 +289,9 @@ draw_sig_table <- function(sig_table, rank){
     theme(strip.text.y = element_text(angle=0)) +
     theme(legend.position = "top") + ylab(rank)
 }
+```
 
+```{r}
 # Plot heatmap on selected
 plot_heatmap <- function(ps, group = "SampleID", log.transform = TRUE){
   require(dplyr)
@@ -317,3 +327,4 @@ plot_heatmap <- function(ps, group = "SampleID", log.transform = TRUE){
     xlab("") + ylab("") +
     theme(axis.text.x = element_text(angle = 90))
 }
+```

@@ -17,7 +17,6 @@ In this project, we use followed
   - [ggplot2](https://ggplot2.tidyverse.org/)
   - [ggpubr](https://rpkgs.datanovia.com/ggpubr/)
   - [ape](https://cran.r-project.org/web/packages/ape/index.html)
-  - [plyr](https://www.rdocumentation.org/packages/plyr/versions/1.8.6)
   - [dplyr](https://dplyr.tidyverse.org/)
   - [DESeq2](http://bioconductor.org/packages/release/bioc/html/DESeq2.html)
 
@@ -40,12 +39,10 @@ library(phyloseq)
 library(ggplot2)
 library(ggpubr)
 library(ape)
-library(plyr)
 library(dplyr)
 library(DESeq2)
 
 source('functions.R')
-
 setwd('/home/alexey/Analysis/16s-amplicon-processing/')
 ```
 
@@ -55,28 +52,50 @@ setwd('/home/alexey/Analysis/16s-amplicon-processing/')
 
 For processing of data, we need specify a way to raw data, and file with
 metadata (information about samples). In our example, raw files are in
-`raw` directory, and metadata in `metadata.csv` file.
+`/raw` directory, and metadata in `metadata.csv` file of current work
+directory.
+
+According dada2 pipeline, default names of samples in seqtable are
+derived from names of raw files. In most cases, this names are useless,
+so there we can rename samples in a flow by specifying a column in
+metadata.
 
 Functions in this module are:
 
-`dada2_processing(raw_files_path, cores=TRUE, trimLeft = c(19, 20)`
+`read_metadata(filename, sample.names, ...)`
 
-  - `raw_files_path` - source .fastq.gz files.
-  - `cores` - number of cores for analysis. Use TRUE for all availible
+Read metadata file, add future sample names to rownames
+
+  - `filename` - name of metadata file
+  - `sample.names` - name of columns with names, which you want to see
+    in downstream analysis. Be sure, that they are unique
+  - `...` - you can pass any information to `read.csv()` function (for
+    example, `sep=("\t")`)
+  - return a dataframe, rownames are from `sample.names` column
+
+`reads_to_seqtable_by_dada2(raw_files_path, trimLeft, truncLen,
+pool=TRUE, cores=TRUE)`
+
+Process reads, plot quality data and show basic log by all steps (also
+save it to “processing.log” file)
+
+  - `raw_files_path` - source to raw .fastq.gz files
   - `trimLeft` - if you want to cut primers from ends, use this variable
     as vector - c(len\_forward, len\_reverse)
-  - return table of ASV and their abundance in samples
+  - `truncLen` - specify the maximum length of reads, also use this
+    variable as vector
+  - `pool` - pooling strategy. Options are `TRUE`, `"pseudo"` or
+    `FALSE`. See [dada2](https://benjjneb.github.io/dada2/tutorial.html)
+    manual.
+  - `cores` - number of cores for analysis. Use `TRUE` for all availible
+  - return ASV table and their abundance in samples
 
-`rename_by_metadata(seqtab, mdat)`
+`assign_taxonomy(seqtab, set_train_path, train_set_species_path, cores =
+TRUE)`
 
-  - `seqtab` - table of ASV to rename
-  - `mdat` - metadata dataframe (use Filename column for basenames of
-    raw files)
-  - return ASV-table with renamed samples
+Assign taxonomy by Bayesian naive classifier
 
-`dada2_assign_taxonomy(seqtab, set_train_path, train_set_species_path,
-cores = TRUE)`
-
+  - `seqtab` - ASV table from `reads_to_seqtable_by_dada2` function
   - `set_train_path` - way to trained SILVA database fastas (see more in
     dada2 pipeline
     [here](https://benjjneb.github.io/dada2/tutorial.html))
@@ -86,11 +105,35 @@ cores = TRUE)`
   - `cores` - number of cores for analysis. Use TRUE for all availible
   - return taxonomy table
 
+`rename_seqtab_by_metadata(seqtab, metadata, old.names)`
+
+rename seqtab to names, specified in `read_metadata` step
+
+  - `seqtab` - ASV table from `reads_to_seqtable_by_dada2` function
+  - `metadata` - metadata dataframe from `read_metadata` function
+  - `old.names` - specify the column from `metadata` with names of a
+    files. This names should be same with rownames of `seqtab`
+  - return ASV table with renamed samples
+
+`assemble_phyloseq(seqtab, metadata, taxonomy, filter.organells = T,
+write_fasta = TRUE)`
+
+Assemble phyloseq object from components (except tree)
+
+  - `seqtab` - ASV table from `rename_seqtab_by_metadata` function
+  - `metadata` - metadata dataframe from `read_metadata` function
+  - `taxonomy` - taxonomy from `assign_taxonomy` function
+  - `filter.organells` - filter all entries, attributes as
+    “Mitochondria” or “Chloroplast”. Can be `TRUE` or `FALSE`
+  - `write_fasta` - allows to write a fasta file of reference sequences
+    in “refseqs.fasta”. Can be `TRUE` or `FALSE`
+  - return phyloseq object
+
 <!-- end list -->
 
 ``` r
-mdat <- read.csv('metadata.csv', sep = '\t')
-rownames(mdat) <- mdat$SampleID
+# read metadata from mapfile
+mdat <- read_metadata('metadata.csv', "SampleID", sep = '\t')
 mdat
 ```
 
@@ -101,45 +144,21 @@ mdat
     ## Enclave.2 Enclave.2        Enclave      2   6    Nad-6
 
 ``` r
-seqtab <- dada2_processing_reads(raw_files_path = 'raw')
+# dada2 pipeline follows to sequence table
+seqtab <- reads_to_seqtable_by_dada2(raw_files_path = 'raw', trimLeft = c(19, 20), truncLen=c(220,180))
 ```
 
     ## [1] "Nad-1" "Nad-2" "Nad-5" "Nad-6"
+
+    ## Scale for 'y' is already present. Adding another scale for 'y', which will
+    ## replace the existing scale.
+    ## Scale for 'y' is already present. Adding another scale for 'y', which will
+    ## replace the existing scale.
+
+![](readme_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+
     ## 25328412 total bases in 126012 reads from 4 samples will be used for learning the error rates.
     ## 20161920 total bases in 126012 reads from 4 samples will be used for learning the error rates.
-
-    ## Dereplicating sequence entries in Fastq file: raw/filtered/Nad-1_F_filt.fastq.gz
-
-    ## Encountered 13176 unique sequences from 25593 total sequences read.
-
-    ## Dereplicating sequence entries in Fastq file: raw/filtered/Nad-2_F_filt.fastq.gz
-
-    ## Encountered 17332 unique sequences from 20680 total sequences read.
-
-    ## Dereplicating sequence entries in Fastq file: raw/filtered/Nad-5_F_filt.fastq.gz
-
-    ## Encountered 18418 unique sequences from 39668 total sequences read.
-
-    ## Dereplicating sequence entries in Fastq file: raw/filtered/Nad-6_F_filt.fastq.gz
-
-    ## Encountered 18813 unique sequences from 40071 total sequences read.
-
-    ## Dereplicating sequence entries in Fastq file: raw/filtered/Nad-1_R_filt.fastq.gz
-
-    ## Encountered 12933 unique sequences from 25593 total sequences read.
-
-    ## Dereplicating sequence entries in Fastq file: raw/filtered/Nad-2_R_filt.fastq.gz
-
-    ## Encountered 17105 unique sequences from 20680 total sequences read.
-
-    ## Dereplicating sequence entries in Fastq file: raw/filtered/Nad-5_R_filt.fastq.gz
-
-    ## Encountered 18063 unique sequences from 39668 total sequences read.
-
-    ## Dereplicating sequence entries in Fastq file: raw/filtered/Nad-6_R_filt.fastq.gz
-
-    ## Encountered 18599 unique sequences from 40071 total sequences read.
-
     ## 4 samples were pooled: 126012 reads in 63894 unique sequences.
     ## 4 samples were pooled: 126012 reads in 62830 unique sequences.
 
@@ -153,71 +172,40 @@ seqtab <- dada2_processing_reads(raw_files_path = 'raw')
 
     ## Identified 304 bimeras out of 1342 input sequences.
 
-``` r
-seqtab <- rename_by_metadata(seqtab, mdat)
+![](readme_files/figure-gfm/unnamed-chunk-2-2.png)<!-- -->
 
-taxa <- dada2_assign_taxonomy(seqtab = seqtab, set_train_path = '/home/alexey/tax_n_refs/silva_nr_v132_train_set.fa.gz', 
+    ##       input filtered denoisedF denoisedR merged nonchim
+    ## Nad-1 29201    25593     24190     24508  18539   17515
+    ## Nad-2 31462    20680     18837     19307   8104    6662
+    ## Nad-5 46226    39668     38127     38513  30414   27512
+    ## Nad-6 46614    40071     38604     38932  30577   27198
+
+``` r
+# rename sequence table by our names
+seqtab2 <- rename_seqtab_by_metadata(seqtab, mdat, "Filename")
+
+# assign taxonomy
+taxa <- assign_taxonomy(seqtab = seqtab2, set_train_path = '/home/alexey/tax_n_refs/silva_nr_v132_train_set.fa.gz', 
                            train_set_species_path = '/home/alexey/tax_n_refs/silva_species_assignment_v132.fa.gz')
-```
 
------
-
-## Create phyloseq object, add tree information to phyloseq object
-
-There we create phyloseq object, which contain all data about our
-dataset. Be sure, that names of all components are equal.
-
-``` r
-ps <- phyloseq(otu_table(seqtab, taxa_are_rows=FALSE), 
-               sample_data(mdat), 
-               tax_table(taxa))
-
+# combine a plyloseq object (without a tree)
+ps <- assemble_phyloseq(seqtab = seqtab2, metadata = mdat, taxonomy = taxa, filter.organells = T, write_fasta = F)
 ps
 ```
 
     ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 1038 taxa and 4 samples ]
+    ## otu_table()   OTU Table:         [ 921 taxa and 4 samples ]
     ## sample_data() Sample Data:       [ 4 samples by 5 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 1038 taxa by 7 taxonomic ranks ]
-
-Also at this step we export fasta file with sequences for each ASV and
-include tree info in a phtloseq object. We do not perform tree
-construction in R due to unsufficiently effective alghoritmes, and
-recommend you to perform it using Fasttree implementation in QIIME2
-package.
-
-`create_ASV_references(ps_object, write = TRUE)`
-
-  - `ps_object` - phyloseq-object
-  - `write` - if True, write a `refseqs.fasta` file with reference fasta
-    for every ASV
-  - return ps\_object with references and ASV\_\_ as name of ASVs
-
-<!-- end list -->
-
-``` r
-ps <- create_ASV_references(ps)
-
-tree <- read_tree('tree.nwk')
-ps <- merge_phyloseq(ps, phy_tree(tree))
-
-ps
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 1038 taxa and 4 samples ]
-    ## sample_data() Sample Data:       [ 4 samples by 5 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 1038 taxa by 7 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 1038 tips and 1034 internal nodes ]
-    ## refseq()      DNAStringSet:      [ 1038 reference sequences ]
+    ## tax_table()   Taxonomy Table:    [ 921 taxa by 7 taxonomic ranks ]
+    ## refseq()      DNAStringSet:      [ 921 reference sequences ]
 
 -----
 
 ## Basic stats and save data
 
 Feel free to explore our data and understand, how many taxa we have, or
-reads per sample number. Also save phyloseq object to
-    file.
+reads per sample number. Also to save phyloseq object to file is a good
+idea
 
 ``` r
 sample_names(ps) # Names of samples
@@ -226,29 +214,23 @@ sample_names(ps) # Names of samples
     ## [1] "Range.1"   "Range.2"   "Enclave.1" "Enclave.2"
 
 ``` r
-rank_names(ps) # Taxonomy ranks
-```
-
-    ## [1] "Kingdom" "Phylum"  "Class"   "Order"   "Family"  "Genus"   "Species"
-
-``` r
 sample_sums(ps) # Sum of reads per sample
 ```
 
     ##   Range.1   Range.2 Enclave.1 Enclave.2 
-    ##     17515      6662     27512     27198
+    ##     16546      5881     18963     18416
 
 ``` r
 tax_table(ps)[1:5, 1:4] # Taxonomy table
 ```
 
     ## Taxonomy Table:     [5 taxa by 4 taxonomic ranks]:
-    ##        Kingdom    Phylum            Class              Order               
-    ## ASV53  "Bacteria" "Verrucomicrobia" "Verrucomicrobiae" "Chthoniobacterales"
-    ## ASV218 "Bacteria" "Chloroflexi"     "Anaerolineae"     "RBG-13-54-9"       
-    ## ASV86  "Bacteria" "WPS-2"           NA                 NA                  
-    ## ASV771 "Bacteria" "Chloroflexi"     "Chloroflexia"     "Elev-1554"         
-    ## ASV606 "Bacteria" "Acidobacteria"   "Acidobacteriia"   "Solibacterales"
+    ##      Kingdom    Phylum           Class                 Order             
+    ## ASV4 "Bacteria" "Proteobacteria" "Alphaproteobacteria" "Rhizobiales"     
+    ## ASV5 "Bacteria" "Chloroflexi"    "P2-11E"              NA                
+    ## ASV6 "Bacteria" "WPS-2"          NA                    NA                
+    ## ASV7 "Bacteria" "Acidobacteria"  "Acidobacteriia"      "Solibacterales"  
+    ## ASV8 "Bacteria" "Acidobacteria"  "Acidobacteriia"      "Acidobacteriales"
 
 ``` r
 otu_table(ps)[1:4, 1:5] # ASV table
@@ -256,47 +238,30 @@ otu_table(ps)[1:4, 1:5] # ASV table
 
     ## OTU Table:          [5 taxa and 4 samples]
     ##                      taxa are columns
-    ##           ASV53 ASV218 ASV86 ASV771 ASV606
-    ## Range.1       0     61     1      0      0
-    ## Range.2       0     13     1      0      0
-    ## Enclave.1   140      0    74     11      9
-    ## Enclave.2    90      0    85      4     14
+    ##           ASV4 ASV5 ASV6 ASV7 ASV8
+    ## Range.1     94  756    1    0    0
+    ## Range.2     29  214    0    0    2
+    ## Enclave.1  446    0  568  447  217
+    ## Enclave.2  412    0  344  388  610
 
 ``` r
 saveRDS(ps, "ps.RData")
+ps <- readRDS("ps.RData")
 ```
 
 -----
 
-## Normalisation
+## EDA
 
-Normalisation of data is a matter of discussions, but there we have an
-opportunity to do it. Now we have relative and simple rarefaction as an
-options, but in future we will perform varstab and log-relative
-normalization
-
-`normaize_phyloseq(ps_object, method='rarefaction')`
-
-  - `ps_object` - phyloseq-object
-  - `method` - method of normalisation. Current options are:
-    “rarefaction”, “relative”
-  - return phyloseq object with normalized data
-
-<!-- end list -->
-
-``` r
-ps.n <- normalize_phyloseq(ps, method='rarefaction')
-```
-
------
-
-## Bargraphs
-
-This function draw a bargraph of relative abundance of different taxa in
-a dataset. Also result is a ggplot-object, so, it is possible add to
-result facet grid for group from metadata
+This part includes alpha- and beta-diversity, and bargraphs
 
 `bargraphps_object, rank, threshold=0.05)`
+
+Draw a bargraph of relative abundance of different taxa in a dataset.
+Also result is a ggplot-object, so, it is possible add to result facet
+grid for group from metadata. Although unlimited number of possible
+sectors, only 21 unique colors are specified, so, use it on a small
+number of categories
 
   - `ps_object` - phyloseq-object
   - `rank` - taxonomical level for drawing
@@ -310,29 +275,29 @@ result facet grid for group from metadata
 bargraph(ps, 'Phylum', 0.03)
 ```
 
-![](readme_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
 
 ``` r
-bargraph(ps, 'Phylum', 0.03) + facet_grid(~ Source, scale = 'free_x')
+bargraph(ps, 'Genus', 0.01) + facet_grid(~ Source, scale = 'free_x')
 ```
 
-![](readme_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-4-2.png)<!-- -->
 
-## Alpha diversity
+`alpha_div_table(ps, metric, group)`
 
-This functions calculate alpha-diversity of samples, and draw it on a
-plot
-
-`alpha_div(ps, metric, group)`
+Calculate alpha-diversity indices for samples. Allows to pass columns
+from metadata
 
   - `ps` - phyloseq object
   - `metric` - group of metrics. Correct values are “Observed”, “Chao1”,
     “ACE”, “Shannon”, “Simpson”, “InvSimpson”, “Fisher” or their group
-  - `group` - specify a column from metadata to add to alpha diversity
-    table
+  - `group` - specify a column, or several columns from metadata to add
+    to alpha diversity table
   - return dataframe vith alpha-diversity indices
 
 `plot_alpha(ps, metric, group)`
+
+Plot specified alpha metric
 
   - `ps` - phyloseq object
   - `metric` - metric. Correct value is one from “Observed”, “Chao1”,
@@ -343,53 +308,42 @@ plot
 <!-- end list -->
 
 ``` r
-alpha_div(ps.n, c("Observed", "Simpson", "Shannon"), "Source")
+alpha_div_table(ps, c("Observed", "Simpson", "Shannon"), "Source")
 ```
 
     ##                   Source Observed  Shannon   Simpson
-    ## Range.1   shooting range      576 5.551381 0.9917399
-    ## Range.2   shooting range      546 5.361222 0.9875593
-    ## Enclave.1        Enclave      551 4.874561 0.9633128
-    ## Enclave.2        Enclave      540 4.795866 0.9601160
+    ## Range.1   shooting range      643 5.568609 0.9916592
+    ## Range.2   shooting range      561 5.425544 0.9893368
+    ## Enclave.1        Enclave      608 5.599392 0.9931810
+    ## Enclave.2        Enclave      610 5.539258 0.9924323
 
 ``` r
-ggarrange(plot_alpha(ps.n, "Observed", "Source"),
-          plot_alpha(ps.n, "Simpson", "Source"), plot_alpha(ps.n, "Shannon", "Source"),
+ggarrange(plot_alpha(ps, "Source", "Observed"),
+          plot_alpha(ps, "Source", "Simpson"), plot_alpha(ps, "Source", "Shannon"),
           nrow = 1, ncol = 3)
 ```
 
-![](readme_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
------
-
-## Beta diversity
+`beta_plot(ps, method, distance, ...))`
 
 Short functiot to draw beta diversity plot
 
-`beta_plot(ps, metric, group, method='PCoA')`
-
   - `ps` - phyloseq object
-  - `metric` - metric. Correct value is one from “bray”, “wunifrac”,
-    “unifrac”
-  - `group` - specify a column from metadata to group by color
   - `method` - method of ordination. Values are “PCoA”, “NMDS”
+  - `...` - allows to pass arguments to `plot_ordination` function. Can
+    be used for determination of color and shape
   - return ggplot scatterplot with distances between samples
 
 <!-- end list -->
 
 ``` r
-beta_plot <- function(ps, metric, group, method='PCoA'){
-  ps.prop <- transform_sample_counts(ps, function(x) x/sum(x))
-  ord.nmds.bray <- ordinate(ps.prop, method=method, distance=metric)
-  plot_ordination(ps.prop, ord.nmds.bray, color = group, title=metric) +
-    geom_point(size=3, alpha=0.7) + labs() +
-    theme_light()
-}
-
-beta_plot(ps, "bray", "Source")
+beta_plot(ps, 'PCoA', 'bray', color = "Filename", shape = "Source")
 ```
 
-![](readme_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+
+-----
 
 ## Differential abundance
 
@@ -399,47 +353,84 @@ this function, we perform comparison of two groups and return table of
 ASVs, significantly different from each other (p-adj \< 0.05) alongside
 DeSEQ2 metrics.
 
-`sig_table(ps_object, formula)`
+`sig_table(ps_object, formula, threshold)`
+
+Construct table of significant ASVs according DeSEQ2, merge it with
+abundance table
 
   - `ps_object` - phyloseq object
   - `formula` - formula ~var\_name for grouping dataset (in our case -
     ~Source)
+  - `threshold` - baseMean and log2FoldChange, determined for filtering
+    of deseq2 table. Use this variable as vector - c(baseMean,
+    log2FoldChange)
   - return dataframe of ASVs, their parameters in DeSEQ2 comparison and
     taxonomy
 
-`draw_sig_table(sig_table, taxa)`
+`draw_sig_table(sig_table, rank)`
 
-  - `sig_table` - table of significant ASVs (log2FoldChange and baseMean
-    columns will be used)
-  - `taxa` - taxonomical level of plot
+Draw a plot by significant table
+
+  - `sig_table` - table of significant ASVs from `sig_table` function
+  - `rank` - taxonomical level of plot
 
 <!-- end list -->
 
 ``` r
-table <- sig_table(ps, ~Source)
-table[1:6,1:9]
+table <- sig_table(ps, ~Source, c(10, 2))
+head(table)
 ```
 
-    ##         baseMean log2FoldChange    lfcSE      stat       pvalue         padj
-    ## ASV53  47.030396      -8.722404 1.735541 -5.025754 5.014587e-07 1.023909e-05
-    ## ASV218 17.227553       7.832519 1.854443  4.223651 2.403759e-05 1.893193e-04
-    ## ASV86  33.711690      -5.877835 1.410739 -4.166493 3.093216e-05 2.282221e-04
-    ## ASV606  4.806288      -5.430473 2.262743 -2.399951 1.639725e-02 3.037296e-02
-    ## ASV671  4.217089      -5.241059 2.352359 -2.228002 2.588038e-02 4.367696e-02
-    ## ASV438  7.297535      -6.035306 2.088734 -2.889456 3.859087e-03 9.359885e-03
-    ##         Kingdom          Phylum            Class
-    ## ASV53  Bacteria Verrucomicrobia Verrucomicrobiae
-    ## ASV218 Bacteria     Chloroflexi     Anaerolineae
-    ## ASV86  Bacteria           WPS-2             <NA>
-    ## ASV606 Bacteria   Acidobacteria   Acidobacteriia
-    ## ASV671 Bacteria Patescibacteria  Saccharimonadia
-    ## ASV438 Bacteria   Acidobacteria   Acidobacteriia
+    ##      baseMean log2FoldChange     lfcSE      stat       pvalue         padj
+    ## ASV4 205.2880      -2.418570 0.7137816 -3.388390 7.030433e-04 2.572775e-03
+    ## ASV5 249.4357      11.715526 1.6365005  7.158889 8.133353e-13 6.905217e-10
+    ## ASV6 181.7334      -9.340577 1.4681159 -6.362288 1.987697e-10 2.410792e-08
+    ## ASV7 167.9250     -10.523863 1.6421070 -6.408756 1.467119e-10 2.075974e-08
+    ## ASV8 172.7039      -7.890038 1.3609013 -5.797657 6.724790e-09 3.004919e-07
+    ## ASV9 151.7798     -10.377816 1.6657023 -6.230295 4.655588e-10 3.952594e-08
+    ##       Kingdom         Phylum               Class             Order
+    ## ASV4 Bacteria Proteobacteria Alphaproteobacteria       Rhizobiales
+    ## ASV5 Bacteria    Chloroflexi              P2-11E              <NA>
+    ## ASV6 Bacteria          WPS-2                <NA>              <NA>
+    ## ASV7 Bacteria  Acidobacteria      Acidobacteriia    Solibacterales
+    ## ASV8 Bacteria  Acidobacteria      Acidobacteriia  Acidobacteriales
+    ## ASV9 Bacteria    Chloroflexi     Ktedonobacteria Ktedonobacterales
+    ##                            Family      Genus Species
+    ## ASV4            Xanthobacteraceae       <NA>    <NA>
+    ## ASV5                         <NA>       <NA>    <NA>
+    ## ASV6                         <NA>       <NA>    <NA>
+    ## ASV7 Solibacteraceae_(Subgroup_3) Bryobacter    <NA>
+    ## ASV8                         <NA>       <NA>    <NA>
+    ## ASV9           Ktedonobacteraceae       <NA>    <NA>
 
 ``` r
-draw_sig_table(table, 'Phylum')
+draw_sig_table(table, 'Family')
 ```
 
-![](readme_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
+`plot_heatmap(ps, group = "SampleID", log.transform = TRUE)`
+
+Plot a heatmap by phyloseq object. Use minimal taxonomic level (Genus),
+and group samples by any category from metadata
+
+  - `ps` - phyloseq object
+  - `group` - group samples (by mean abundance). Column from the
+    metadata
+  - `log.transform` - log-transformation of abundance. Can be `TRUE` or
+    `FALSE`
+
+DISCLAIMER: This function isn’t perfect. There are lines with zero
+abundance in a graph (see below). In future I’m going to improve it :)
+
+``` r
+# prune phyloseq according %sig_table% result
+sig.ps <- prune_taxa(rownames(table), ps)
+
+plot_heatmap(sig.ps, group = "SampleID", log.transform = TRUE)
+```
+
+![](readme_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 -----
 
