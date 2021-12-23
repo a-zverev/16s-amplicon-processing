@@ -2,13 +2,14 @@
 ## Intro
 
 This pipline offers first trying to standartise procedure of soil 16s
-amplicone sequences Illumina reads processing. Most operations performed
-by several libraries and covered in functions. There we will talk about
-most common way of analysis - but for tune or more details, please, feel
-free to read and rewrite specific function.
+amplicone sequences Illumina reads processing in ARRIAM. Most operations
+performed by several libraries and covered in functions. There we will
+talk about most common way of analysis - but for tune or more details
+you can edit functions themselves, in [functions.R](/functions.R) or use
+a [Template](/Template.Rmd) for your own pipeline.
 
-In this project, we use followed
-    libraries:
+In this project, followed libraries have been
+    used:
 
   - [dada2](https://benjjneb.github.io/dada2/tutorial.html)
   - [Biostrings](https://bioconductor.org/packages/release/bioc/html/Biostrings.html)
@@ -25,7 +26,7 @@ In this project, we use followed
 ## Libraries and functions import
 
 Load requred libraries. Please, install them, if you don\`t have it.
-Also, import functions and set your working directory.
+Also, import functions, set your working directory and random seed.
 
 In our test data, we will see at microbiomes of sandy soils. In this
 case, we compare sand with frost inclusion on an abandoned shooting
@@ -43,6 +44,7 @@ library(dplyr)
 library(DESeq2)
 
 source('functions.R')
+set.seed(5678)
 setwd('/home/alexey/Analysis/16s-amplicon-processing/')
 ```
 
@@ -55,12 +57,9 @@ metadata (information about samples). In our example, raw files are in
 `/raw` directory, and metadata in `metadata.csv` file of current work
 directory.
 
-According dada2 pipeline, default names of samples in seqtable are
-derived from names of raw files. In most cases, this names are useless,
-so there we can rename samples in a flow by specifying a column in
-metadata.
-
 Functions in this module are:
+
+#### Read metadata
 
 `read_metadata(filename, sample.names, ...)`
 
@@ -72,6 +71,21 @@ Read metadata file, add future sample names to rownames
   - `...` - you can pass any information to `read.csv()` function (for
     example, `sep=("\t")`)
   - return a dataframe, rownames are from `sample.names` column
+
+<!-- end list -->
+
+``` r
+mdat <- read_metadata('metadata.csv', "SampleID", sep = '\t')
+mdat
+```
+
+    ##            SampleID         Source Repeat Num Filename
+    ## Range.1     Range.1 shooting range      1   1    Nad-1
+    ## Range.2     Range.2 shooting range      2   2    Nad-2
+    ## Enclave.1 Enclave.1        Enclave      1   5    Nad-5
+    ## Enclave.2 Enclave.2        Enclave      2   6    Nad-6
+
+#### dada2 pipeline
 
 `reads_to_seqtable_by_dada2(raw_files_path, trimLeft, truncLen,
 pool=TRUE, cores=TRUE)`
@@ -88,63 +102,12 @@ save it to “processing.log” file)
     `FALSE`. See [dada2](https://benjjneb.github.io/dada2/tutorial.html)
     manual.
   - `cores` - number of cores for analysis. Use `TRUE` for all availible
-  - return ASV table and their abundance in samples
-
-`assign_taxonomy(seqtab, set_train_path, train_set_species_path, cores =
-TRUE)`
-
-Assign taxonomy by Bayesian naive classifier
-
-  - `seqtab` - ASV table from `reads_to_seqtable_by_dada2` function
-  - `set_train_path` - way to trained SILVA database fastas (see more in
-    dada2 pipeline
-    [here](https://benjjneb.github.io/dada2/tutorial.html))
-  - `train_set_species_path` - way to SILVA species fastas (see more in
-    dada2 pipeline
-    [here](https://benjjneb.github.io/dada2/tutorial.html))
-  - `cores` - number of cores for analysis. Use TRUE for all availible
-  - return taxonomy table
-
-`rename_seqtab_by_metadata(seqtab, metadata, old.names)`
-
-rename seqtab to names, specified in `read_metadata` step
-
-  - `seqtab` - ASV table from `reads_to_seqtable_by_dada2` function
-  - `metadata` - metadata dataframe from `read_metadata` function
-  - `old.names` - specify the column from `metadata` with names of a
-    files. This names should be same with rownames of `seqtab`
-  - return ASV table with renamed samples
-
-`assemble_phyloseq(seqtab, metadata, taxonomy, filter.organells = T,
-write_fasta = TRUE)`
-
-Assemble phyloseq object from components (except tree)
-
-  - `seqtab` - ASV table from `rename_seqtab_by_metadata` function
-  - `metadata` - metadata dataframe from `read_metadata` function
-  - `taxonomy` - taxonomy from `assign_taxonomy` function
-  - `filter.organells` - filter all entries, attributes as
-    “Mitochondria” or “Chloroplast”. Can be `TRUE` or `FALSE`
-  - `write_fasta` - allows to write a fasta file of reference sequences
-    in “refseqs.fasta”. Can be `TRUE` or `FALSE`
-  - return phyloseq object
+  - return ASV table and their abundance in
+samples
 
 <!-- end list -->
 
 ``` r
-# read metadata from mapfile
-mdat <- read_metadata('metadata.csv', "SampleID", sep = '\t')
-mdat
-```
-
-    ##            SampleID         Source Repeat Num Filename
-    ## Range.1     Range.1 shooting range      1   1    Nad-1
-    ## Range.2     Range.2 shooting range      2   2    Nad-2
-    ## Enclave.1 Enclave.1        Enclave      1   5    Nad-5
-    ## Enclave.2 Enclave.2        Enclave      2   6    Nad-6
-
-``` r
-# dada2 pipeline follows to sequence table
 seqtab <- reads_to_seqtable_by_dada2(raw_files_path = 'raw', trimLeft = c(19, 20), truncLen=c(220,180))
 ```
 
@@ -155,7 +118,7 @@ seqtab <- reads_to_seqtable_by_dada2(raw_files_path = 'raw', trimLeft = c(19, 20
     ## Scale for 'y' is already present. Adding another scale for 'y', which will
     ## replace the existing scale.
 
-![](readme_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
 
     ## 25328412 total bases in 126012 reads from 4 samples will be used for learning the error rates.
     ## 20161920 total bases in 126012 reads from 4 samples will be used for learning the error rates.
@@ -172,7 +135,7 @@ seqtab <- reads_to_seqtable_by_dada2(raw_files_path = 'raw', trimLeft = c(19, 20
 
     ## Identified 304 bimeras out of 1342 input sequences.
 
-![](readme_files/figure-gfm/unnamed-chunk-2-2.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-3-2.png)<!-- -->
 
     ##       input filtered denoisedF denoisedR merged nonchim
     ## Nad-1 29201    25593     24190     24508  18539   17515
@@ -180,15 +143,74 @@ seqtab <- reads_to_seqtable_by_dada2(raw_files_path = 'raw', trimLeft = c(19, 20
     ## Nad-5 46226    39668     38127     38513  30414   27512
     ## Nad-6 46614    40071     38604     38932  30577   27198
 
-``` r
-# rename sequence table by our names
-seqtab2 <- rename_seqtab_by_metadata(seqtab, mdat, "Filename")
+### Rename ASV table
 
-# assign taxonomy
+According dada2 pipeline, default names of samples in seqtable are
+derived from names of raw files. In most cases, this names are useless,
+so there we can rename samples in a flow by specifying a column in
+metadata.
+
+`rename_seqtab_by_metadata(seqtab, metadata, old.names)`
+
+rename seqtab to names, specified in `read_metadata` step
+
+  - `seqtab` - ASV table from `reads_to_seqtable_by_dada2` function
+  - `metadata` - metadata dataframe from `read_metadata` function
+  - `old.names` - specify the column from `metadata` with names of a
+    files. This names should be same with rownames of `seqtab`
+  - return ASV table with renamed samples
+
+<!-- end list -->
+
+``` r
+seqtab2 <- rename_seqtab_by_metadata(seqtab, mdat, "Filename")
+```
+
+### Assign taxonomy
+
+`assign_taxonomy(seqtab, set_train_path, train_set_species_path, cores =
+TRUE)`
+
+Assign taxonomy by Bayesian naive classifier
+
+  - `seqtab` - ASV table from `reads_to_seqtable_by_dada2` function
+  - `set_train_path` - way to trained SILVA database fastas (see more in
+    dada2 pipeline
+    [here](https://benjjneb.github.io/dada2/tutorial.html))
+  - `train_set_species_path` - way to SILVA species fastas (see more in
+    dada2 pipeline
+    [here](https://benjjneb.github.io/dada2/tutorial.html))
+  - `cores` - number of cores for analysis. Use TRUE for all availible
+  - return taxonomy
+table
+
+<!-- end list -->
+
+``` r
 taxa <- assign_taxonomy(seqtab = seqtab2, set_train_path = '/home/alexey/tax_n_refs/silva_nr_v132_train_set.fa.gz', 
                            train_set_species_path = '/home/alexey/tax_n_refs/silva_species_assignment_v132.fa.gz')
+```
 
-# combine a plyloseq object (without a tree)
+### Assemble phyloseq object
+
+`assemble_phyloseq(seqtab, metadata, taxonomy, filter.organells = T,
+write_fasta = TRUE)`
+
+Assemble phyloseq object from components (except tree)
+
+  - `seqtab` - ASV table from `rename_seqtab_by_metadata` function
+  - `metadata` - metadata dataframe from `read_metadata` function
+  - `taxonomy` - taxonomy from `assign_taxonomy` function
+  - `filter.organells` - filter all entries, attributes as
+    “Mitochondria” or “Chloroplast”. Can be `TRUE` or `FALSE`
+  - `write_fasta` - allows to write a fasta file of reference sequences
+    in “refseqs.fasta”. Can be `TRUE` or `FALSE`
+  - return phyloseq
+object
+
+<!-- end list -->
+
+``` r
 ps <- assemble_phyloseq(seqtab = seqtab2, metadata = mdat, taxonomy = taxa, filter.organells = T, write_fasta = F)
 ps
 ```
@@ -203,9 +225,9 @@ ps
 
 ## Basic stats and save data
 
-Feel free to explore our data and understand, how many taxa we have, or
-reads per sample number. Also to save phyloseq object to file is a good
-idea
+Feel free to explore the data and understand, how many taxa we have,
+reads per sample number and taxonomical structure. Also to save phyloseq
+object to file is always a good idea
 
 ``` r
 sample_names(ps) # Names of samples
@@ -218,7 +240,7 @@ sample_sums(ps) # Sum of reads per sample
 ```
 
     ##   Range.1   Range.2 Enclave.1 Enclave.2 
-    ##     16546      5881     18963     18416
+    ##     16574      5886     18973     18423
 
 ``` r
 tax_table(ps)[1:5, 1:4] # Taxonomy table
@@ -255,6 +277,8 @@ ps <- readRDS("ps.RData")
 
 This part includes alpha- and beta-diversity, and bargraphs
 
+#### Bargraphs
+
 `bargraphps_object, rank, threshold=0.05)`
 
 Draw a bargraph of relative abundance of different taxa in a dataset.
@@ -275,13 +299,15 @@ number of categories
 bargraph(ps, 'Phylum', 0.03)
 ```
 
-![](readme_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 ``` r
 bargraph(ps, 'Genus', 0.01) + facet_grid(~ Source, scale = 'free_x')
 ```
 
-![](readme_files/figure-gfm/unnamed-chunk-4-2.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-8-2.png)<!-- -->
+
+#### Alpha-diversity
 
 `alpha_div_table(ps, metric, group)`
 
@@ -312,10 +338,10 @@ alpha_div_table(ps, c("Observed", "Simpson", "Shannon"), "Source")
 ```
 
     ##                   Source Observed  Shannon   Simpson
-    ## Range.1   shooting range      643 5.568609 0.9916592
-    ## Range.2   shooting range      561 5.425544 0.9893368
-    ## Enclave.1        Enclave      608 5.599392 0.9931810
-    ## Enclave.2        Enclave      610 5.539258 0.9924323
+    ## Range.1   shooting range      641 5.568590 0.9916790
+    ## Range.2   shooting range      562 5.427390 0.9893535
+    ## Enclave.1        Enclave      609 5.601094 0.9931880
+    ## Enclave.2        Enclave      611 5.540465 0.9924378
 
 ``` r
 ggarrange(plot_alpha(ps, "Source", "Observed"),
@@ -323,7 +349,9 @@ ggarrange(plot_alpha(ps, "Source", "Observed"),
           nrow = 1, ncol = 3)
 ```
 
-![](readme_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+
+#### Beta-diversity
 
 `beta_plot(ps, method, distance, ...))`
 
@@ -341,7 +369,7 @@ Short functiot to draw beta diversity plot
 beta_plot(ps, 'PCoA', 'bray', color = "Filename", shape = "Source")
 ```
 
-![](readme_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 -----
 
@@ -372,22 +400,77 @@ abundance table
 Draw a plot by significant table
 
   - `sig_table` - table of significant ASVs from `sig_table` function
-  - `rank` - taxonomical level of plot
+  - `rank` - taxonomical level of
+    plot
 
 <!-- end list -->
 
 ``` r
 table <- sig_table(ps, ~Source, c(10, 2))
+```
+
+    ## converting counts to integer mode
+
+    ##   Note: levels of factors in the design contain characters other than
+    ##   letters, numbers, '_' and '.'. It is recommended (but not required) to use
+    ##   only letters, numbers, and delimiters '_' or '.', as these are safe characters
+    ##   for column names in R. [This is a message, not an warning or error]
+    ##   Note: levels of factors in the design contain characters other than
+    ##   letters, numbers, '_' and '.'. It is recommended (but not required) to use
+    ##   only letters, numbers, and delimiters '_' or '.', as these are safe characters
+    ##   for column names in R. [This is a message, not an warning or error]
+
+    ## gene-wise dispersion estimates
+
+    ## mean-dispersion relationship
+
+    ##   Note: levels of factors in the design contain characters other than
+    ##   letters, numbers, '_' and '.'. It is recommended (but not required) to use
+    ##   only letters, numbers, and delimiters '_' or '.', as these are safe characters
+    ##   for column names in R. [This is a message, not an warning or error]
+
+    ## final dispersion estimates
+
+    ##   Note: levels of factors in the design contain characters other than
+    ##   letters, numbers, '_' and '.'. It is recommended (but not required) to use
+    ##   only letters, numbers, and delimiters '_' or '.', as these are safe characters
+    ##   for column names in R. [This is a message, not an warning or error]
+
+    ## using pre-existing size factors
+
+    ## estimating dispersions
+
+    ## found already estimated dispersions, replacing these
+
+    ## gene-wise dispersion estimates
+
+    ## mean-dispersion relationship
+
+    ##   Note: levels of factors in the design contain characters other than
+    ##   letters, numbers, '_' and '.'. It is recommended (but not required) to use
+    ##   only letters, numbers, and delimiters '_' or '.', as these are safe characters
+    ##   for column names in R. [This is a message, not an warning or error]
+
+    ## final dispersion estimates
+
+    ##   Note: levels of factors in the design contain characters other than
+    ##   letters, numbers, '_' and '.'. It is recommended (but not required) to use
+    ##   only letters, numbers, and delimiters '_' or '.', as these are safe characters
+    ##   for column names in R. [This is a message, not an warning or error]
+
+    ## fitting model and testing
+
+``` r
 head(table)
 ```
 
     ##      baseMean log2FoldChange     lfcSE      stat       pvalue         padj
-    ## ASV4 205.2880      -2.418570 0.7137816 -3.388390 7.030433e-04 2.572775e-03
-    ## ASV5 249.4357      11.715526 1.6365005  7.158889 8.133353e-13 6.905217e-10
-    ## ASV6 181.7334      -9.340577 1.4681159 -6.362288 1.987697e-10 2.410792e-08
-    ## ASV7 167.9250     -10.523863 1.6421070 -6.408756 1.467119e-10 2.075974e-08
-    ## ASV8 172.7039      -7.890038 1.3609013 -5.797657 6.724790e-09 3.004919e-07
-    ## ASV9 151.7798     -10.377816 1.6657023 -6.230295 4.655588e-10 3.952594e-08
+    ## ASV4 206.1649      -2.435617 0.7347598 -3.314848 9.169291e-04 3.186328e-03
+    ## ASV5 247.9933      11.698374 1.6439059  7.116207 1.109379e-12 9.252217e-10
+    ## ASV6 182.7794      -9.361641 1.4732473 -6.354426 2.092060e-10 2.492540e-08
+    ## ASV7 168.9372     -10.541229 1.6493274 -6.391229 1.645574e-10 2.287348e-08
+    ## ASV8 173.8732      -7.908777 1.3575020 -5.825978 5.677900e-09 2.630761e-07
+    ## ASV9 152.7636     -10.395833 1.6707895 -6.222108 4.905185e-10 4.508327e-08
     ##       Kingdom         Phylum               Class             Order
     ## ASV4 Bacteria Proteobacteria Alphaproteobacteria       Rhizobiales
     ## ASV5 Bacteria    Chloroflexi              P2-11E              <NA>
@@ -407,7 +490,7 @@ head(table)
 draw_sig_table(table, 'Family')
 ```
 
-![](readme_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
 `plot_heatmap(ps, group = "SampleID", log.transform = TRUE)`
 
@@ -430,11 +513,6 @@ sig.ps <- prune_taxa(rownames(table), ps)
 plot_heatmap(sig.ps, group = "SampleID", log.transform = TRUE)
 ```
 
-![](readme_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](readme_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 -----
-
-## Networks
-
-This part is under construction. Feel free to see `drafts.R` for any
-interesting information
