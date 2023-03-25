@@ -162,6 +162,14 @@ assemble_phyloseq <- function(seqtab, metadata, taxonomy, filter.organells = T, 
 #   ps <- merge_phyloseq(ps, phy_tree(m.fasttree))
 # }
 
+# Write ASVs table from ps-object
+write_ASVs_table <- function(ps_object, filename){
+  write.csv(cbind(ps_object@otu_table %>% t() %>%  data.frame(),
+                  ps_object@tax_table %>% data.frame()),
+            filename)
+}
+
+
 # Draw barplot of relative abundance by taxa level
 bargraph <- function(ps, rank, threshold=0.05){
   require(dplyr)
