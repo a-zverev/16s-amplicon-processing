@@ -303,6 +303,7 @@ plot_heatmap <- function(ps, group = "SampleID", log.transform = TRUE){
   require(ggplot2)
   
   ps <- prune_taxa(taxa_sums(ps) > 0, ps)
+  ps <- tax_glom(ps, "Genus")
   sig.taxa.long <- psmelt(ps) %>%
     arrange(Phylum) %>% 
     mutate(row = row_number()) %>% 
