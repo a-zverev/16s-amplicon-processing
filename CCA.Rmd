@@ -1,0 +1,139 @@
+---
+title: "PCA"
+author: "Aleksei Zverev"
+date: '2023-04-17'
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+library(DECIPHER)
+library(phyloseq)
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(vegan)
+library(ggvegan)
+library(ggrepel)
+
+set.seed(5678)
+setwd("~/Analysis/16s-amplicon-processing/")
+```
+
+## Preparation
+
+Merge samples to level with unique nutrition data. Sort the ASVs, select top 1000 or less. Check metadata at the map, fix it, if nessesary
+
+```{r}
+ps <- readRDS("ps.RData")
+
+# we do not have propper column in metadata, create it
+ps@sam_data$BioGroup <- paste0(ps@sam_data$Group, ".", ps@sam_data$BioRepeat)
+
+ps.m <- merge_samples(ps, "BioGroup", fun = sum)
+ps.m@sam_data
+```
+
+Sample data is fucked, so read a new nutrition data instead of it
+
+```{r}
+agro <- read.csv("agrochem_map.csv")
+rownames(agro) <- agro$SampleID
+agro
+
+sample_data(ps.m) <- sample_data(agro)
+```
+
+## Made CCA model
+
+```{r}
+veganifyOTU <- function(physeq){
+  require(phyloseq)
+  if(taxa_are_rows(physeq)){physeq <- t(physeq)}
+  return(as(otu_table(physeq), "matrix"))
+}
+
+ps.top1k <- prune_taxa(names(sort(taxa_sums(ps.m), TRUE)[1:1000]), ps.m)
+X <- veganifyOTU(ps.top1k)
+  
+vare.cca <- vegan::cca(X ~ TOC + pH + P + K + N.ammonium + N.nitrate, data=agro)
+anova(vare.cca)
+
+```
+
+Model is invalid :( Ok, let's see closely - it can de tuned
+
+```{r}
+anova(vare.cca, by="terms") # just one valid predictor
+vif.cca(vare.cca) # lots of multicollinear predictors
+```
+Drop predictors one by one, according to: 1) max VIF value, 2) insignificant in anova
+
+```{r}
+vare.cca <- vegan::cca(X ~ TOC + pH + K + N.ammonium + N.nitrate, data=agro) # drop P
+anova(vare.cca)
+anova(vare.cca, by="terms") # still one valid predictor
+vif.cca(vare.cca) # keep dropping
+```
+keep dropping. Valid VIF is ~<10-12
+
+```{r}
+vare.cca <- vegan::cca(X ~ TOC + pH + K + N.nitrate, data=agro) # drop N.ammonium
+anova(vare.cca)
+anova(vare.cca, by="terms") # still one valid predictor
+vif.cca(vare.cca) # keep dropping
+```
+VIF is good, model is valid with one significant predictor
+
+## Plot CCA
+
+Our model contain three types of data:
+
+ * CCA coordinates for the samples
+ * CCA coordinates for the ASVs
+ * CCA coordinates for the agrochemical vectors.
+ 
+Enrich the model using metadata: taxonomy for ASVs, metadata for samples
+
+```{r}
+cca.data <- fortify(vare.cca)
+
+cca.taxa <- cca.data %>% 
+  filter(Score == "species") %>%
+  inner_join(ps.top1k@tax_table %>% data.frame() %>% mutate(OTU = rownames(.)), 
+             by = c("Label" = "OTU"))
+cca.biplot <- cca.data %>% 
+  filter(Score == "biplot")
+cca.sites <- cca.data %>% 
+  filter(Score == "sites") %>% 
+  inner_join(ps.m@sam_data %>% data.frame() %>% select(Location, SampleID) %>% distinct(),
+             by = c("Label" = "SampleID"))
+```
+
+```{r}
+# plot species
+ggplot() +
+  geom_point(data=cca.taxa %>% 
+               inner_join(data.frame(OTU = names(taxa_sums(ps.top1k)),
+                                     Total.abund = taxa_sums(ps.top1k)),
+                          by = c("Label" = "OTU")),
+             aes(x=CCA1, y=CCA2, color=Phylum, size=Total.abund), alpha=0.9) +
+  geom_segment(data = cca.biplot, 
+               aes(x = 0, xend = CCA1, y = 0, yend = CCA2), 
+               alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
+  geom_text_repel(data = cca.biplot, aes(x=CCA1, y=CCA2, label= Label), size=4) +
+  theme_light() +
+  ggtitle("A: Species")
+
+# plot samples
+ggplot() +
+  geom_point(data=cca.sites, aes(x=CCA1, y=CCA2, color=Location), size=3, alpha=0.7) +
+  geom_segment(data = cca.biplot, 
+               aes(x = 0, xend = CCA1, y = 0, yend = CCA2), 
+               alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
+  geom_text_repel(data = cca.biplot, aes(x=CCA1, y=CCA2, label= Label), size=4) +
+  theme_light() +
+  ggtitle("B. Samples")
+```
+

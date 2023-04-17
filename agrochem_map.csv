@@ -1,0 +1,10 @@
+SampleID,Location,TOC,pH,P,K,N-ammonium,N-nitrate
+U1.A,Quarry Clay,1.45,6.8,42,369,98.6,15.2
+U1.B,Quarry Clay,1.56,7,7.3,337,44.3,1.59
+U1.C,Quarry Clay,1.21,6.9,36,885,93,12.4
+U2.A,Forest Global,0.66,6.4,46,59,7.62,2.5
+U2.B,Forest Global,0.87,5.9,52,188,10.3,2.24
+U2.C,Forest Global,0.55,5.5,67,296,19.2,0.77
+U3.A,Quarry Limestone,1.22,7.3,4.7,785,3.76,0.73
+U3.B,Quarry Limestone,1.34,7.5,6.8,118,9.36,1.38
+U3.C,Quarry Limestone,1.12,7.4,2.1,240,4.26,4.65
