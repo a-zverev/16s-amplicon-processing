@@ -1,21 +1,21 @@
 ---
 title: "PCA"
 author: "Aleksei Zverev"
-date: '2023-04-17'
+date: '2023-12-27'
+
 output: 
   html_document: 
     keep_md: yes
 ---
 
 ```{r setup, include=FALSE}
-library(DECIPHER)
+knitr::opts_chunk$set(fig.width=12, fig.height=8) 
+
 library(phyloseq)
 library(ggplot2)
-library(ggpubr)
 library(dplyr)
 library(vegan)
 library(ggvegan)
-library(ggrepel)
 
 set.seed(5678)
 setwd("~/Analysis/16s-amplicon-processing/")
@@ -23,19 +23,19 @@ setwd("~/Analysis/16s-amplicon-processing/")
 
 ## Preparation
 
-Merge samples to level with unique nutrition data. Sort the ASVs, select top 1000 or less. Check metadata at the map, fix it, if nessesary
+Merge samples to level with unique nutrition data. Check the metadata at the map and fix it, if necessary
 
 ```{r}
 ps <- readRDS("ps.RData")
 
-# we do not have propper column in metadata, create it
+# we do not have proper column in metadata, so create it
 ps@sam_data$BioGroup <- paste0(ps@sam_data$Group, ".", ps@sam_data$BioRepeat)
 
 ps.m <- merge_samples(ps, "BioGroup", fun = sum)
 ps.m@sam_data
 ```
 
-Sample data is fucked, so read a new nutrition data instead of it
+The sample data are fucked, so get new nutrition data instead of it...
 
 ```{r}
 agro <- read.csv("agrochem_map.csv")
@@ -46,6 +46,8 @@ sample_data(ps.m) <- sample_data(agro)
 ```
 
 ## Made CCA model
+
+For a CCA model sort the ASVs, and select top-1000 or less. 
 
 ```{r}
 veganifyOTU <- function(physeq){
@@ -62,13 +64,14 @@ anova(vare.cca)
 
 ```
 
-Model is invalid :( Ok, let's see closely - it can de tuned
+Model is invalid :( Ok, let's see it closely - it can be tuned
 
 ```{r}
 anova(vare.cca, by="terms") # just one valid predictor
 vif.cca(vare.cca) # lots of multicollinear predictors
 ```
-Drop predictors one by one, according to: 1) max VIF value, 2) insignificant in anova
+
+Drop predictors one by one, according to: 1) max VIF value, 2) insignificance in ANOVA
 
 ```{r}
 vare.cca <- vegan::cca(X ~ TOC + pH + K + N.ammonium + N.nitrate, data=agro) # drop P
@@ -76,6 +79,7 @@ anova(vare.cca)
 anova(vare.cca, by="terms") # still one valid predictor
 vif.cca(vare.cca) # keep dropping
 ```
+
 keep dropping. Valid VIF is ~<10-12
 
 ```{r}
@@ -84,56 +88,174 @@ anova(vare.cca)
 anova(vare.cca, by="terms") # still one valid predictor
 vif.cca(vare.cca) # keep dropping
 ```
+
 VIF is good, model is valid with one significant predictor
+
+```{r}
+vare.cca
+```
 
 ## Plot CCA
 
 Our model contain three types of data:
 
- * CCA coordinates for the samples
- * CCA coordinates for the ASVs
- * CCA coordinates for the agrochemical vectors.
+ * CCA coordinates for the samples (`vare.cca$CCA$u`)
+ * CCA coordinates for the ASVs (`vare.cca$CCA$v`)
+ * CCA coordinates for the agrochemical vectors (`vare.cca$CCA$biplot`).
  
-Enrich the model using metadata: taxonomy for ASVs, metadata for samples
+Enrich the model using this information: taxonomy for ASVs, and metadata for samples
 
 ```{r}
-cca.data <- fortify(vare.cca)
+ASVs.data <- vare.cca$CCA$v %>% 
+               data.frame() %>% 
+               mutate(ASV = rownames(.)) %>% 
+               inner_join(data.frame(ASV = names(taxa_sums(ps.top1k)),
+                                     Total.abund = taxa_sums(ps.top1k),
+                                     ps.top1k@tax_table[,2], # Phylum
+                                     ps.top1k@tax_table[,3], # Class
+                                     ps.top1k@tax_table[,4],
+                                     ps.top1k@tax_table[,5],
+                                     ps.top1k@tax_table[,6]),
+                          by = "ASV")
 
-cca.taxa <- cca.data %>% 
-  filter(Score == "species") %>%
-  inner_join(ps.top1k@tax_table %>% data.frame() %>% mutate(OTU = rownames(.)), 
-             by = c("Label" = "OTU"))
-cca.biplot <- cca.data %>% 
-  filter(Score == "biplot")
-cca.sites <- cca.data %>% 
-  filter(Score == "sites") %>% 
-  inner_join(ps.m@sam_data %>% data.frame() %>% select(Location, SampleID) %>% distinct(),
-             by = c("Label" = "SampleID"))
+samples.data <- vare.cca$CCA$u %>% 
+  data.frame() %>% 
+  mutate(Names = rownames(.)) %>% 
+  inner_join(ps.top1k@sam_data %>% 
+               data.frame() %>% 
+               mutate(Samples = rownames(.)), by = c("Names" = "Samples"))
+
 ```
 
+Plot our data
+
 ```{r}
-# plot species
+# plot ASVs
 ggplot() +
-  geom_point(data=cca.taxa %>% 
-               inner_join(data.frame(OTU = names(taxa_sums(ps.top1k)),
-                                     Total.abund = taxa_sums(ps.top1k)),
-                          by = c("Label" = "OTU")),
+  geom_point(data=ASVs.data,
              aes(x=CCA1, y=CCA2, color=Phylum, size=Total.abund), alpha=0.9) +
-  geom_segment(data = cca.biplot, 
-               aes(x = 0, xend = CCA1, y = 0, yend = CCA2), 
+  geom_segment(data = vare.cca$CCA$biplot %>% data.frame(),
+               aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
                alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
-  geom_text_repel(data = cca.biplot, aes(x=CCA1, y=CCA2, label= Label), size=4) +
+  geom_text(data = vare.cca$CCA$biplot %>%
+                    data.frame() %>%
+                    mutate(Label = rownames(.)),
+            aes(x=CCA1, y=CCA2, label= Label,
+                hjust = -0.5), size=4) +
   theme_light() +
   ggtitle("A: Species")
 
 # plot samples
 ggplot() +
-  geom_point(data=cca.sites, aes(x=CCA1, y=CCA2, color=Location), size=3, alpha=0.7) +
-  geom_segment(data = cca.biplot, 
-               aes(x = 0, xend = CCA1, y = 0, yend = CCA2), 
+  geom_point(data=samples.data, 
+             aes(x=CCA1, y=CCA2, color=Location, shape=Replica), size=3, alpha=0.7) +
+  geom_segment(data = vare.cca$CCA$biplot %>% data.frame(),
+               aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
                alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
-  geom_text_repel(data = cca.biplot, aes(x=CCA1, y=CCA2, label= Label), size=4) +
+  geom_text(data = vare.cca$CCA$biplot %>%
+                    data.frame() %>%
+                    mutate(Label = rownames(.)),
+            aes(x=CCA1, y=CCA2, label= Label,
+                hjust = -0.5), size=4) +
   theme_light() +
   ggtitle("B. Samples")
 ```
+
+It is reasonable to filter minor phyla
+
+```{r}
+ASVs.data %>% 
+  group_by(Phylum) %>% 
+  summarize(sum = sum(Total.abund)) %>% 
+  arrange(desc(sum))
+
+
+major.phyla <- ASVs.data %>% 
+  group_by(Phylum) %>% 
+  summarize(sum = sum(Total.abund)) %>% 
+  arrange(desc(sum)) %>% 
+  select(Phylum) %>% 
+  head(10) %>% 
+  as.vector()
+
+# plot major ASVs
+ggplot() +
+  geom_point(data=ASVs.data %>% filter(Phylum %in% major.phyla$Phylum),
+             aes(x=CCA1, y=CCA2, color=Phylum, size=Total.abund), alpha=0.9) +
+  geom_segment(data = vare.cca$CCA$biplot %>% data.frame(),
+               aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
+               alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
+  geom_text(data = vare.cca$CCA$biplot %>%
+                    data.frame() %>%
+                    mutate(Label = rownames(.)),
+            aes(x=CCA1, y=CCA2, label= Label,
+                hjust = -0.5), size=4) +
+  theme_light() +
+  theme(legend.position = "bottom") +
+  ggtitle("A: Species")
+```
+
+... or plot different phyla separately (uncomment labels to indicate ASV names)
+
+```{r}
+for (i in major.phyla$Phylum) {
+  
+  if (i == "Proteobacteria") {
+    for (j in c("Deltaproteobacteria", "Alphaproteobacteria", "Gammaproteobacteria")){
+
+      p <- ggplot() +
+      geom_point(data=ASVs.data,
+                 aes(x=CCA1, y=CCA2, size=Total.abund), alpha=0.2, color="grey80") +
+      geom_point(data=ASVs.data %>% filter(Class == j),
+                 aes(x=CCA1, y=CCA2, color=Family, size=Total.abund), alpha=0.9) +
+#### comment this to remove labels ####
+      geom_text(data=ASVs.data %>% filter(Class == j),
+                 aes(x=CCA1, y=CCA2, color=Family, label=paste0('#', substring(ASV, 4))),
+                size=3, nudge_y=0.1) +
+####                               ####
+      geom_segment(data = vare.cca$CCA$biplot %>% data.frame(),
+                  aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
+                  alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
+      geom_text(data = vare.cca$CCA$biplot %>%
+                        data.frame() %>%
+                        mutate(Label = rownames(.)),
+                aes(x=CCA1, y=CCA2, label= Label,
+                    hjust = -0.5), size=4) +
+      theme_light() +
+      ggtitle(paste(i, " - ",j))
+    print(p)
+    }
+  } else {
+    
+    p <- ggplot() +
+      geom_point(data=ASVs.data,
+                 aes(x=CCA1, y=CCA2, size=Total.abund), alpha=0.2, color="grey80") +
+      geom_point(data=ASVs.data %>% filter(Phylum == i),
+                 aes(x=CCA1, y=CCA2, color=Family, size=Total.abund), alpha=0.9) +
+#### comment this to remove labels ####
+      geom_text(data=ASVs.data %>% filter(Phylum == i),
+                 aes(x=CCA1, y=CCA2, color=Family, label=paste0('#', substring(ASV, 4))),
+                size=3, nudge_y=0.1) +
+####                               ####
+      geom_segment(data = vare.cca$CCA$biplot %>% data.frame(),
+                   aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
+                   alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
+      geom_text(data = vare.cca$CCA$biplot %>%
+                        data.frame() %>%
+                        mutate(Label = rownames(.)),
+                aes(x=CCA1, y=CCA2, label= Label,
+                    hjust = -0.5), size=4) +
+      theme_light() +
+      ggtitle(i)
+    print(p)
+    }
+}
+```
+
+
+
+
+
+
+
 

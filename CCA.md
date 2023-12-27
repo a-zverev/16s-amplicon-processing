@@ -1,7 +1,8 @@
 ---
 title: "PCA"
 author: "Aleksei Zverev"
-date: '2023-04-17'
+date: '2023-12-27'
+
 output: 
   html_document: 
     keep_md: yes
@@ -11,13 +12,13 @@ output:
 
 ## Preparation
 
-Merge samples to level with unique nutrition data. Sort the ASVs, select top 1000 or less. Check metadata at the map, fix it, if nessesary
+Merge samples to level with unique nutrition data. Check the metadata at the map and fix it, if necessary
 
 
 ```r
 ps <- readRDS("ps.RData")
 
-# we do not have propper column in metadata, create it
+# we do not have proper column in metadata, so create it
 ps@sam_data$BioGroup <- paste0(ps@sam_data$Group, ".", ps@sam_data$BioRepeat)
 
 ps.m <- merge_samples(ps, "BioGroup", fun = sum)
@@ -54,7 +55,7 @@ ps.m@sam_data
 ## U3.C       NA       NA    NA        NA         10       NA       NA
 ```
 
-Sample data is fucked, so read a new nutrition data instead of it
+The sample data are fucked, so get new nutrition data instead of it...
 
 
 ```r
@@ -64,16 +65,16 @@ agro
 ```
 
 ```
-##      SampleID         Location  TOC  pH    P   K N.ammonium N.nitrate
-## U1.A     U1.A      Quarry Clay 1.45 6.8 42.0 369      98.60     15.20
-## U1.B     U1.B      Quarry Clay 1.56 7.0  7.3 337      44.30      1.59
-## U1.C     U1.C      Quarry Clay 1.21 6.9 36.0 885      93.00     12.40
-## U2.A     U2.A    Forest Global 0.66 6.4 46.0  59       7.62      2.50
-## U2.B     U2.B    Forest Global 0.87 5.9 52.0 188      10.30      2.24
-## U2.C     U2.C    Forest Global 0.55 5.5 67.0 296      19.20      0.77
-## U3.A     U3.A Quarry Limestone 1.22 7.3  4.7 785       3.76      0.73
-## U3.B     U3.B Quarry Limestone 1.34 7.5  6.8 118       9.36      1.38
-## U3.C     U3.C Quarry Limestone 1.12 7.4  2.1 240       4.26      4.65
+##      SampleID Replica         Location  TOC  pH    P   K N.ammonium N.nitrate
+## U1.A     U1.A       A      Quarry Clay 1.45 6.8 42.0 369      98.60     15.20
+## U1.B     U1.B       B      Quarry Clay 1.56 7.0  7.3 337      44.30      1.59
+## U1.C     U1.C       C      Quarry Clay 1.21 6.9 36.0 885      93.00     12.40
+## U2.A     U2.A       A    Forest Global 0.66 6.4 46.0  59       7.62      2.50
+## U2.B     U2.B       B    Forest Global 0.87 5.9 52.0 188      10.30      2.24
+## U2.C     U2.C       C    Forest Global 0.55 5.5 67.0 296      19.20      0.77
+## U3.A     U3.A       A Quarry Limestone 1.22 7.3  4.7 785       3.76      0.73
+## U3.B     U3.B       B Quarry Limestone 1.34 7.5  6.8 118       9.36      1.38
+## U3.C     U3.C       C Quarry Limestone 1.12 7.4  2.1 240       4.26      4.65
 ```
 
 ```r
@@ -81,6 +82,8 @@ sample_data(ps.m) <- sample_data(agro)
 ```
 
 ## Made CCA model
+
+For a CCA model sort the ASVs, and select top-1000 or less. 
 
 
 ```r
@@ -110,7 +113,7 @@ anova(vare.cca)
 ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ```
 
-Model is invalid :( Ok, let's see closely - it can de tuned
+Model is invalid :( Ok, let's see it closely - it can be tuned
 
 
 ```r
@@ -144,7 +147,8 @@ vif.cca(vare.cca) # lots of multicollinear predictors
 ##        TOC         pH          P          K N.ammonium  N.nitrate 
 ##  12.619744  27.160608  44.737806   2.242099  19.243336  12.252530
 ```
-Drop predictors one by one, according to: 1) max VIF value, 2) insignificant in anova
+
+Drop predictors one by one, according to: 1) max VIF value, 2) insignificance in ANOVA
 
 
 ```r
@@ -195,6 +199,7 @@ vif.cca(vare.cca) # keep dropping
 ##        TOC         pH          K N.ammonium  N.nitrate 
 ##   6.627632   5.836973   1.845574  16.261543  10.182854
 ```
+
 keep dropping. Valid VIF is ~<10-12
 
 
@@ -245,64 +250,232 @@ vif.cca(vare.cca) # keep dropping
 ##       TOC        pH         K N.nitrate 
 ##  3.097511  2.695779  1.346477  1.476320
 ```
+
 VIF is good, model is valid with one significant predictor
+
+
+```r
+vare.cca
+```
+
+```
+## Call: cca(formula = X ~ TOC + pH + K + N.nitrate, data = agro)
+## 
+##               Inertia Proportion Rank
+## Total          2.0997     1.0000     
+## Constrained    1.3597     0.6476    4
+## Unconstrained  0.7400     0.3524    4
+## Inertia is scaled Chi-square 
+## 
+## Eigenvalues for constrained axes:
+##   CCA1   CCA2   CCA3   CCA4 
+## 0.6787 0.3151 0.2291 0.1367 
+## 
+## Eigenvalues for unconstrained axes:
+##     CA1     CA2     CA3     CA4 
+## 0.27567 0.20219 0.16956 0.09257
+```
 
 ## Plot CCA
 
 Our model contain three types of data:
 
- * CCA coordinates for the samples
- * CCA coordinates for the ASVs
- * CCA coordinates for the agrochemical vectors.
+ * CCA coordinates for the samples (`vare.cca$CCA$u`)
+ * CCA coordinates for the ASVs (`vare.cca$CCA$v`)
+ * CCA coordinates for the agrochemical vectors (`vare.cca$CCA$biplot`).
  
-Enrich the model using metadata: taxonomy for ASVs, metadata for samples
+Enrich the model using this information: taxonomy for ASVs, and metadata for samples
 
 
 ```r
-cca.data <- fortify(vare.cca)
+ASVs.data <- vare.cca$CCA$v %>% 
+               data.frame() %>% 
+               mutate(ASV = rownames(.)) %>% 
+               inner_join(data.frame(ASV = names(taxa_sums(ps.top1k)),
+                                     Total.abund = taxa_sums(ps.top1k),
+                                     ps.top1k@tax_table[,2], # Phylum
+                                     ps.top1k@tax_table[,3], # Class
+                                     ps.top1k@tax_table[,4],
+                                     ps.top1k@tax_table[,5],
+                                     ps.top1k@tax_table[,6]),
+                          by = "ASV")
 
-cca.taxa <- cca.data %>% 
-  filter(Score == "species") %>%
-  inner_join(ps.top1k@tax_table %>% data.frame() %>% mutate(OTU = rownames(.)), 
-             by = c("Label" = "OTU"))
-cca.biplot <- cca.data %>% 
-  filter(Score == "biplot")
-cca.sites <- cca.data %>% 
-  filter(Score == "sites") %>% 
-  inner_join(ps.m@sam_data %>% data.frame() %>% select(Location, SampleID) %>% distinct(),
-             by = c("Label" = "SampleID"))
+samples.data <- vare.cca$CCA$u %>% 
+  data.frame() %>% 
+  mutate(Names = rownames(.)) %>% 
+  inner_join(ps.top1k@sam_data %>% 
+               data.frame() %>% 
+               mutate(Samples = rownames(.)), by = c("Names" = "Samples"))
 ```
 
+Plot our data
+
 
 ```r
-# plot species
+# plot ASVs
 ggplot() +
-  geom_point(data=cca.taxa %>% 
-               inner_join(data.frame(OTU = names(taxa_sums(ps.top1k)),
-                                     Total.abund = taxa_sums(ps.top1k)),
-                          by = c("Label" = "OTU")),
+  geom_point(data=ASVs.data,
              aes(x=CCA1, y=CCA2, color=Phylum, size=Total.abund), alpha=0.9) +
-  geom_segment(data = cca.biplot, 
-               aes(x = 0, xend = CCA1, y = 0, yend = CCA2), 
+  geom_segment(data = vare.cca$CCA$biplot %>% data.frame(),
+               aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
                alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
-  geom_text_repel(data = cca.biplot, aes(x=CCA1, y=CCA2, label= Label), size=4) +
+  geom_text(data = vare.cca$CCA$biplot %>%
+                    data.frame() %>%
+                    mutate(Label = rownames(.)),
+            aes(x=CCA1, y=CCA2, label= Label,
+                hjust = -0.5), size=4) +
   theme_light() +
   ggtitle("A: Species")
 ```
 
-![](CCA_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
+![](CCA_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
 
 ```r
 # plot samples
 ggplot() +
-  geom_point(data=cca.sites, aes(x=CCA1, y=CCA2, color=Location), size=3, alpha=0.7) +
-  geom_segment(data = cca.biplot, 
-               aes(x = 0, xend = CCA1, y = 0, yend = CCA2), 
+  geom_point(data=samples.data, 
+             aes(x=CCA1, y=CCA2, color=Location, shape=Replica), size=3, alpha=0.7) +
+  geom_segment(data = vare.cca$CCA$biplot %>% data.frame(),
+               aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
                alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
-  geom_text_repel(data = cca.biplot, aes(x=CCA1, y=CCA2, label= Label), size=4) +
+  geom_text(data = vare.cca$CCA$biplot %>%
+                    data.frame() %>%
+                    mutate(Label = rownames(.)),
+            aes(x=CCA1, y=CCA2, label= Label,
+                hjust = -0.5), size=4) +
   theme_light() +
   ggtitle("B. Samples")
 ```
 
-![](CCA_files/figure-html/unnamed-chunk-8-2.png)<!-- -->
+![](CCA_files/figure-html/unnamed-chunk-9-2.png)<!-- -->
+
+It is reasonable to filter minor phyla
+
+
+```r
+ASVs.data %>% 
+  group_by(Phylum) %>% 
+  summarize(sum = sum(Total.abund)) %>% 
+  arrange(desc(sum))
+```
+
+```
+## # A tibble: 19 × 2
+##    Phylum              sum
+##    <chr>             <dbl>
+##  1 Proteobacteria   130209
+##  2 Bacteroidetes     71192
+##  3 Acidobacteria     41486
+##  4 Actinobacteria    37025
+##  5 Verrucomicrobia   22942
+##  6 Planctomycetes    10531
+##  7 Chloroflexi        6910
+##  8 Patescibacteria    3139
+##  9 Gemmatimonadetes   2772
+## 10 Thaumarchaeota     1633
+## 11 Firmicutes         1208
+## 12 Cyanobacteria       780
+## 13 Elusimicrobia       581
+## 14 Latescibacteria     480
+## 15 Rokubacteria        346
+## 16 Nitrospirae         183
+## 17 Chlamydiae          148
+## 18 FCPU426             142
+## 19 Armatimonadetes     136
+```
+
+```r
+major.phyla <- ASVs.data %>% 
+  group_by(Phylum) %>% 
+  summarize(sum = sum(Total.abund)) %>% 
+  arrange(desc(sum)) %>% 
+  select(Phylum) %>% 
+  head(10) %>% 
+  as.vector()
+
+# plot major ASVs
+ggplot() +
+  geom_point(data=ASVs.data %>% filter(Phylum %in% major.phyla$Phylum),
+             aes(x=CCA1, y=CCA2, color=Phylum, size=Total.abund), alpha=0.9) +
+  geom_segment(data = vare.cca$CCA$biplot %>% data.frame(),
+               aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
+               alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
+  geom_text(data = vare.cca$CCA$biplot %>%
+                    data.frame() %>%
+                    mutate(Label = rownames(.)),
+            aes(x=CCA1, y=CCA2, label= Label,
+                hjust = -0.5), size=4) +
+  theme_light() +
+  theme(legend.position = "bottom") +
+  ggtitle("A: Species")
+```
+
+![](CCA_files/figure-html/unnamed-chunk-10-1.png)<!-- -->
+
+... or plot different phyla separately (uncomment labels to indicate ASV names)
+
+
+```r
+for (i in major.phyla$Phylum) {
+  
+  if (i == "Proteobacteria") {
+    for (j in c("Deltaproteobacteria", "Alphaproteobacteria", "Gammaproteobacteria")){
+
+      p <- ggplot() +
+      geom_point(data=ASVs.data,
+                 aes(x=CCA1, y=CCA2, size=Total.abund), alpha=0.2, color="grey80") +
+      geom_point(data=ASVs.data %>% filter(Class == j),
+                 aes(x=CCA1, y=CCA2, color=Family, size=Total.abund), alpha=0.9) +
+#### comment this to remove labels ####
+      geom_text(data=ASVs.data %>% filter(Class == j),
+                 aes(x=CCA1, y=CCA2, color=Family, label=paste0('#', substring(ASV, 4))),
+                size=3, nudge_y=0.1) +
+####                               ####
+      geom_segment(data = vare.cca$CCA$biplot %>% data.frame(),
+                  aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
+                  alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
+      geom_text(data = vare.cca$CCA$biplot %>%
+                        data.frame() %>%
+                        mutate(Label = rownames(.)),
+                aes(x=CCA1, y=CCA2, label= Label,
+                    hjust = -0.5), size=4) +
+      theme_light() +
+      ggtitle(paste(i, " - ",j))
+    print(p)
+    }
+  } else {
+    
+    p <- ggplot() +
+      geom_point(data=ASVs.data,
+                 aes(x=CCA1, y=CCA2, size=Total.abund), alpha=0.2, color="grey80") +
+      geom_point(data=ASVs.data %>% filter(Phylum == i),
+                 aes(x=CCA1, y=CCA2, color=Family, size=Total.abund), alpha=0.9) +
+#### comment this to remove labels ####
+      geom_text(data=ASVs.data %>% filter(Phylum == i),
+                 aes(x=CCA1, y=CCA2, color=Family, label=paste0('#', substring(ASV, 4))),
+                size=3, nudge_y=0.1) +
+####                               ####
+      geom_segment(data = vare.cca$CCA$biplot %>% data.frame(),
+                   aes(x = 0, xend = CCA1, y = 0, yend = CCA2),
+                   alpha=0.8, color = "black",arrow = arrow(angle = 3)) +
+      geom_text(data = vare.cca$CCA$biplot %>%
+                        data.frame() %>%
+                        mutate(Label = rownames(.)),
+                aes(x=CCA1, y=CCA2, label= Label,
+                    hjust = -0.5), size=4) +
+      theme_light() +
+      ggtitle(i)
+    print(p)
+    }
+}
+```
+
+![](CCA_files/figure-html/unnamed-chunk-11-1.png)<!-- -->![](CCA_files/figure-html/unnamed-chunk-11-2.png)<!-- -->![](CCA_files/figure-html/unnamed-chunk-11-3.png)<!-- -->![](CCA_files/figure-html/unnamed-chunk-11-4.png)<!-- -->![](CCA_files/figure-html/unnamed-chunk-11-5.png)<!-- -->![](CCA_files/figure-html/unnamed-chunk-11-6.png)<!-- -->![](CCA_files/figure-html/unnamed-chunk-11-7.png)<!-- -->![](CCA_files/figure-html/unnamed-chunk-11-8.png)<!-- -->![](CCA_files/figure-html/unnamed-chunk-11-9.png)<!-- -->![](CCA_files/figure-html/unnamed-chunk-11-10.png)<!-- -->![](CCA_files/figure-html/unnamed-chunk-11-11.png)<!-- -->![](CCA_files/figure-html/unnamed-chunk-11-12.png)<!-- -->
+
+
+
+
+
+
+
 
