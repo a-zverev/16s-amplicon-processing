@@ -3,8 +3,6 @@ library(Biostrings)
 library(DECIPHER)
 library(phyloseq)
 library(ggplot2)
-library(data.table)
-library(ape)
 library(dplyr)
 library(DESeq2)
 
@@ -116,8 +114,8 @@ assemble_phyloseq <- function(seqtab, metadata, taxonomy, filter.organells = T, 
   taxa_names(ps_object) <- paste0("ASV", seq(ntaxa(ps_object)))
   
   # write fastas, if required
-  if (write_fasta == TRUE){
-    writeXStringSet(ps_object@refseq, format = 'fasta', filepath = 'refseqs.fasta')
+  if (exists("write_fasta")){
+    writeXStringSet(ps_object@refseq, format = 'fasta', filepath = write_fasta)
   }
   
   # filter mitochondria and chloroplasts, if requied. NA protected by masking
@@ -126,46 +124,21 @@ assemble_phyloseq <- function(seqtab, metadata, taxonomy, filter.organells = T, 
     # filter non-attributed
     ps_object <- subset_taxa(ps_object, Phylum != "NA")
     
-    ps_object@tax_table[is.na(ps_object@tax_table)] <- TRUE
-    ps_object <- subset_taxa(ps_object,
-                      !(Family  == "Mitochondria" |
-                          Class   == "Chloroplast" |
-                          Order   == "Chloroplast"))
-    ps_object@tax_table <- dplyr::na_if(ps_object@tax_table, TRUE)
+    asvs.keep <-ps_object@tax_table %>% 
+      data.frame() %>%  
+      filter((Family != "Mitochondria" & Order != "Chloroplast") %>% 
+      tidyr::replace_na(TRUE))  %>% 
+      rownames()
+    ps_object <- prune_taxa(asvs.keep, ps_object)
   }
   return(ps_object)
 }
 
-# # Root the tree and add to ps object
-# add_tree_to_ps <- function(ps, tree){
-#   require(phyloseq)
-#   require(ape)
-#   require(data.table)
-#   
-#   # find longest branch and return it's label
-#   pick_new_outgroup <- function(tree.unrooted){
-#     # tablify parts of tree that we need.
-#     treeDT <- 
-#       cbind(
-#         data.table(tree.unrooted$edge),
-#         data.table(length = tree.unrooted$edge.length)
-#       )[1:Ntip(tree.unrooted)] %>% 
-#       cbind(data.table(id = tree.unrooted$tip.label))
-#     # Take the longest terminal branch as outgroup
-#     new.outgroup <- treeDT[which.max(length)]$id
-#     return(new.outgroup)
-#   }
-#   
-#   m.fasttree <- read_tree(tree)
-#   m.fasttree <- ape::root(m.fasttree, outgroup=pick_new_outgroup(m.fasttree), resolve.root=TRUE)
-#   
-#   ps <- merge_phyloseq(ps, phy_tree(m.fasttree))
-# }
 
 # Write ASVs table from ps-object
-write_ASVs_table <- function(ps_object, filename){
-  write.csv(cbind(ps_object@otu_table %>% t() %>%  data.frame(),
-                  ps_object@tax_table %>% data.frame()),
+write_ASVs_table <- function(ps, filename){
+  write.csv(cbind(ps@otu_table %>% t() %>%  data.frame(),
+                  ps@tax_table %>% data.frame()),
             filename)
 }
 

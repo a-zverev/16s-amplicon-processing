@@ -1,8 +1,15 @@
 ---
-title: ""
+title: "Base R template for 16s amplicon processing"
 output: 
-  github_document:
+  html_document:
+    keep_md: yes
     toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 5
+    number_sections: true
+    theme: lumen
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
@@ -11,9 +18,13 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Intro
 
-This pipline offers first trying to standartise procedure of soil 16s amplicone sequences Illumina reads processing in ARRIAM. Most operations performed by several libraries and covered in functions. There we will talk about most common way of analysis - but for tune or more details you can edit functions themselves, in [functions.R](/functions.R) or use a [Template](/Template.Rmd) for your own pipeline.
+This pipeline offers an attempt to standardize procedure of soil 16S rDNA Illumina reads processing in ARRIAM. Most operations are performed by R libraries and are covered in functions. Here we talk about the most common way of the analysis - for the tuning or for more details you have to manipulate with the functions themselves, in [functions.R](/functions.R) or use them for the building of your own pipeline. 
 
-In this project, followed libraries have been used:
+As a rule, raw reads processing is more conservative, whereas the EDA and the plotting require more tuning. Routinely I use [functions](/functions.R) for the raw reads processing, and then use the [EDA](/eda.md) template for the EDA. In the template where I can directly modify any function according to my needs.
+
+I also strongly recommend to save the data in `.RData` files after merging the phyloseq object.
+
+Required libraries:
 
 * [dada2](https://benjjneb.github.io/dada2/tutorial.html)
 * [Biostrings](https://bioconductor.org/packages/release/bioc/html/Biostrings.html)
@@ -21,7 +32,6 @@ In this project, followed libraries have been used:
 * [phyloseq](https://joey711.github.io/phyloseq/)
 * [ggplot2](https://ggplot2.tidyverse.org/)
 * [ggpubr](https://rpkgs.datanovia.com/ggpubr/)
-* [ape](https://cran.r-project.org/web/packages/ape/index.html)
 * [dplyr](https://dplyr.tidyverse.org/)
 * [DESeq2](http://bioconductor.org/packages/release/bioc/html/DESeq2.html)
 
@@ -30,24 +40,23 @@ In this project, followed libraries have been used:
 
 ## Libraries and functions import
 
-Load requred libraries. Please, install them, if you don`t have it. Also, import functions, set your working directory and random seed.
+Load required libraries. Please, install them, if you don't have it. Also, import functions, set your working directory and the random seed.
 
-In our test data, we will see at microbiomes of sandy soils. In this case, we compare sand with frost inclusion on an abandoned shooting range and self-grown sands (called Anclav).
+In our test data, we will see at the microbial communities on abandoned and reclaimed 
+mining sites in the Komi Republic (data are obtained from [this article](https://doi.org/10.3390/microorganisms11030720)).
 
 ```{r message=FALSE, warning=FALSE}
 library(dada2)
 library(Biostrings)
 library(DECIPHER)
 library(phyloseq)
-library(ggplot2)
-library(ggpubr)
-library(ape)
-library(dplyr)
-library(DESeq2)
+library(tidyverse)
+
 
 source('functions.R')
 set.seed(5678)
-setwd('/home/alexey/Analysis/16s-amplicon-processing/')
+
+setwd('~/Analysis/16s-amplicon-processing/')
 ```
 
 
@@ -55,7 +64,7 @@ setwd('/home/alexey/Analysis/16s-amplicon-processing/')
 
 ## Dada2 processing of sequences
 
-For processing of data, we need specify a way to raw data, and file with metadata (information about samples). In our example, raw files are in `/raw` directory, and metadata in `metadata.csv` file of current work directory.
+For processing of data, we need to specify a way to raw data, and file with metadata (information about samples). In our example, raw files are in `/raw` directory, and metadata in `metadata.csv` file of current work directory.
 
 Functions in this module are:
 
@@ -63,15 +72,17 @@ Functions in this module are:
 
 `read_metadata(filename, sample.names, ...)`
 
-Read metadata file, add future sample names to rownames
+Read a metadata file, add desirable sample names to rownames (it is important for the downstream analysis). It is reasonable to use patterns for the fast identification of samples. For example, in this dataset the pattern is <GROUP>.<BIOREPEAT>.<TRCHREPEAT> (U2.A.2, or U1.C.3), so the name itself is enough for the complete identification of the sample.
 
 * `filename` - name of metadata file
-* `sample.names` - name of columns with names, which you want to see in downstream analysis. Be sure, that they are unique
-* `...` - you can pass any information to `read.csv()` function (for example, `sep=("\t")`)
+* `sample.names` - column with names, which you want to see in downstream analysis. Be sure, that names are unique
+* `...` - you also can pass any information to `read.csv()` function (for example, the separator `sep=("\t")`)
 * return a dataframe, rownames are from `sample.names` column
 
 ```{r}
-mdat <- read_metadata('metadata.csv', "SampleID", sep = '\t')
+mdat <- read_metadata(filename = 'map.csv',
+                      sample.names = "SampleID",
+                      sep = '\t')
 mdat
 ```
 
@@ -79,34 +90,40 @@ mdat
 
 `reads_to_seqtable_by_dada2(raw_files_path, trimLeft, truncLen, pool=TRUE, cores=TRUE)`
 
-Process reads, plot quality data and show basic log by all steps (also save it to "processing.log" file)
+Process reads, plot quality data and show basic stats by all steps (also saves it to `processing.log` file).
 
 * `raw_files_path` - source to raw .fastq.gz files
 * `trimLeft` - if you want to cut primers from ends, use this variable as vector - c(len_forward, len_reverse)
 * `truncLen` - specify the maximum length of reads, also use this variable as vector
 * `pool` - pooling strategy. Options are `TRUE`, `"pseudo"` or `FALSE`. See [dada2](https://benjjneb.github.io/dada2/tutorial.html) manual.
-* `cores` - number of cores for analysis. Use `TRUE` for all availible
+* `cores` - number of cores for analysis. Use `TRUE` for all available
 * return ASV table and their abundance in samples
 
 ```{r, cache=TRUE}
-seqtab <- reads_to_seqtable_by_dada2(raw_files_path = 'raw', trimLeft = c(19, 20), truncLen=c(220,180))
+seqtab <- reads_to_seqtable_by_dada2(raw_files_path = 'raw',
+                                     trimLeft = c(19, 20), 
+                                     truncLen = c(220,180),
+                                     cores = 30)
 ```
+
+Looks good :)
 
 ### Rename ASV table
 
-According dada2 pipeline, default names of samples in seqtable are derived from names of raw files. In most cases, this names are useless, so there we can rename samples in a flow by specifying a column in metadata.
-
 `rename_seqtab_by_metadata(seqtab, metadata, old.names)`
 
-rename seqtab to names, specified in `read_metadata` step
+According dada2 pipeline, default names of samples in seqtable are derived from names of the raw files. In most cases, these names are useless, so we have to rename samples according our desirable names from the metadata.
 
 * `seqtab` - ASV table from `reads_to_seqtable_by_dada2` function
 * `metadata` - metadata dataframe from `read_metadata` function
-* `old.names` - specify the column from `metadata` with names of a files. This names should be same with rownames of `seqtab`
+* `old.names` - specify the `metadata` column with raw file names. If everything is right, this names should be same with current rownames of `seqtab`
 * return ASV table with renamed samples
 
 ```{r}
-seqtab2 <- rename_seqtab_by_metadata(seqtab, mdat, "Filename")
+seqtab2 <- rename_seqtab_by_metadata(seqtab = seqtab,
+                                     metadata = mdat,
+                                     old.names = "Filename")
+rownames(seqtab2)
 ```
 
 ### Assign taxonomy
@@ -118,12 +135,14 @@ Assign taxonomy by Bayesian naive classifier
 * `seqtab` - ASV table from `reads_to_seqtable_by_dada2` function
 * `set_train_path` - way to trained SILVA database fastas (see more in dada2 pipeline [here](https://benjjneb.github.io/dada2/tutorial.html))
 * `train_set_species_path` - way to SILVA species fastas (see more in dada2 pipeline [here](https://benjjneb.github.io/dada2/tutorial.html))
-* `cores` - number of cores for analysis. Use TRUE for all availible
+* `cores` - number of cores for analysis. Use TRUE for all available
 * return taxonomy table
 
 ```{r, cache=TRUE}
-taxa <- assign_taxonomy(seqtab = seqtab2, set_train_path = '/home/alexey/tax_n_refs/silva_nr_v132_train_set.fa.gz', 
-                           train_set_species_path = '/home/alexey/tax_n_refs/silva_species_assignment_v132.fa.gz')
+taxa <- assign_taxonomy(seqtab = seqtab2, 
+                        set_train_path = '~/tax_n_refs/silva_nr_v132_train_set.fa.gz', 
+                        train_set_species_path = '~/tax_n_refs/silva_species_assignment_v132.fa.gz',
+                        cores = 30)
 ```
 
 ### Assemble phyloseq object
@@ -136,21 +155,38 @@ Assemble phyloseq object from components (except tree)
 * `metadata` - metadata dataframe from `read_metadata` function
 * `taxonomy` - taxonomy from `assign_taxonomy` function
 * `filter.organells` - filter all entries, attributes as "Mitochondria" or "Chloroplast". Can be `TRUE` or `FALSE`
-* `write_fasta` - allows to write a fasta file of reference sequences in "refseqs.fasta". Can be `TRUE` or `FALSE`
+* `write_fasta` - allows to write a fasta file of reference sequences in a specified fastq-file
 * return phyloseq object
 
 
 ```{r}
-ps <- assemble_phyloseq(seqtab = seqtab2, metadata = mdat, taxonomy = taxa, filter.organells = T, write_fasta = F)
+ps <- assemble_phyloseq(seqtab = seqtab2,
+                        metadata = mdat, 
+                        taxonomy = taxa, 
+                        filter.organells = TRUE, 
+                        write_fasta = 'refseqs.fasta')
+
+saveRDS(ps, "ps.RData")
+
+ps
+```
+
+### Construct tree via QIIME2
+
+```{r}
+system2(c('./build_tree.sh', 'refseqs.fasta'))
+tree <- ape::read.tree('tree.nwk')
+ps <- merge_phyloseq(ps, tree)
+
 ps
 ```
 
 
----
 
-## Basic stats and save data
 
-Feel free to explore the data and understand, how many taxa we have, reads per sample number and taxonomical structure. Also to save phyloseq object to file is always a good idea
+## Basic stats
+
+Feel free to explore the data and understand, how many taxa we have, reads per sample number and taxonomical structure. If necessary, you can save the ASVs table and the taxonomy in .csv file and explore in Excel
 
 ```{r}
 sample_names(ps) # Names of samples
@@ -160,131 +196,27 @@ sample_sums(ps) # Sum of reads per sample
 tax_table(ps)[1:5, 1:4] # Taxonomy table
 otu_table(ps)[1:4, 1:5] # ASV table
 
-saveRDS(ps, "ps.RData")
-ps <- readRDS("ps.RData")
+plot(width(ps@refseq)) # length of references
+
+ps@sam_data # metadata
 ```
 
+`write_ASVs_table(ps, filename)`
 
----
-
-## EDA
-
-This part includes alpha- and beta-diversity, and bargraphs
-
-#### Bargraphs
-
-`bargraphps_object, rank, threshold=0.05)`
-
-Draw a bargraph of relative abundance of different taxa in a dataset. Also result is a ggplot-object, so, it is possible add to result facet grid for group from metadata. Although unlimited number of possible sectors, only 21 unique colors are specified, so, use it on a small number of categories 
-
-* `ps_object` - phyloseq-object
-* `rank` - taxonomical level for drawing
-* `threshold` - taxa with abundanse less than a threshold will be grouped in "less than" category
-* return ggplot graph
-
-
-```{r, fig.height=6, fig.width=8}
-bargraph(ps, 'Phylum', 0.03)
-
-bargraph(ps, 'Genus', 0.01) + facet_grid(~ Source, scale = 'free_x')
-```
-
-#### Alpha-diversity
-
-`alpha_div_table(ps, metric, group)`
-
-Calculate alpha-diversity indices for samples. Allows to pass columns from metadata
+Expornt ASVs table and taxonomic annotation in the .csv file
 
 * `ps` - phyloseq object
-* `metric` - group of metrics. Correct values are "Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher" or their group
-* `group` - specify a column, or several columns from metadata to add to alpha diversity table
-* return dataframe vith alpha-diversity indices
+* `filename` - filename to write the data
 
-
-`plot_alpha(ps, metric, group)`
-
-Plot specified alpha metric
-
-* `ps` - phyloseq object
-* `metric` - metric. Correct value is one from "Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"
-* `group` - specify a column from metadata to group values
-* return ggplot boxplot with points of exact values
- 
-
-```{r, fig.width=8}
-alpha_div_table(ps, c("Observed", "Simpson", "Shannon"), "Source")
-
-
-ggarrange(plot_alpha(ps, "Source", "Observed"),
-          plot_alpha(ps, "Source", "Simpson"), plot_alpha(ps, "Source", "Shannon"),
-          nrow = 1, ncol = 3)
-
+```{r}
+# Write table as .csv
+write_ASVs_table <- function(ps, filename){
+  write.csv(cbind(ps@otu_table %>% t() %>%  data.frame(),
+                  ps@tax_table %>% data.frame()),
+            filename)
+}
 ```
 
-#### Beta-diversity
+## EDA and analysis
 
-`beta_plot(ps, method, distance, ...))`
-
-Short functiot to draw beta diversity plot
-
-* `ps` - phyloseq object
-* `method` - method of ordination. Values are "PCoA", "NMDS"
-* `...` - allows to pass arguments to `plot_ordination` function. Can be used for determination of color and shape
-* return ggplot scatterplot with distances between samples
-
-
-```{r, fig.width=8}
-beta_plot(ps, 'PCoA', 'bray', color = "Filename", shape = "Source")
-```
-
-
----
-
-## Differential abundance
-
-Here we try to find ASVs, which abundance significantly different in comparison within two groups. For that, we will use DeSEQ2 package. In this function, we perform comparison of two groups and return table of ASVs, significantly different from each other (p-adj < 0.05) alongside DeSEQ2 metrics.
-
-`sig_table(ps_object, formula, threshold)`
-
-Construct table of significant ASVs according DeSEQ2, merge it with abundance table
-
-* `ps_object` - phyloseq object
-* `formula` - formula ~var_name for grouping dataset (in our case - ~Source)
-* `threshold` - baseMean and log2FoldChange, determined for filtering of deseq2 table. Use this variable as vector - c(baseMean, log2FoldChange)
-* return dataframe of ASVs, their parameters in DeSEQ2 comparison and taxonomy
-
-
-`draw_sig_table(sig_table, rank)`
-
-Draw a plot by significant table
-
-* `sig_table` - table of significant ASVs from `sig_table` function
-* `rank` - taxonomical level of plot
-
-
-```{r, fig.height=12, fig.width=8}
-table <- sig_table(ps, ~Source, c(10, 2))
-head(table)
-
-
-draw_sig_table(table, 'Family')
-```
-
-`plot_heatmap(ps, group = "SampleID", log.transform = TRUE)`
-
-Plot a heatmap by phyloseq object. Use minimal taxonomic level (Genus), and group samples by any category from metadata
-
-* `ps` - phyloseq object
-* `group` - group samples (by mean abundance). Column from the metadata
-* `log.transform` - log-transformation of abundance. Can be `TRUE` or `FALSE`
-
-DISCLAIMER: This function isn't perfect. There are lines with zero abundance in a graph (see below). In future I'm going to improve it :)
-
-```{r, fig.height=12, fig.width=8}
-# prune phyloseq according %sig_table% result
-sig.ps <- prune_taxa(rownames(table), ps)
-
-plot_heatmap(sig.ps, group = "SampleID", log.transform = TRUE)
-```
-
----
+Downstream analysis is a bit more complex, so it will be described in [EDA](/eda.md) module
