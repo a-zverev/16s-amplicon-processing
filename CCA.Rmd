@@ -67,7 +67,7 @@ anova(vare.cca)
 Model is invalid :( Ok, let's see it closely - it can be tuned
 
 ```{r}
-anova(vare.cca, by="terms") # just one valid predictor
+мфкуюссф# just one valid predictor
 vif.cca(vare.cca) # lots of multicollinear predictors
 ```
 

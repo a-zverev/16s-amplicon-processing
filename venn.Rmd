@@ -1,0 +1,76 @@
+---
+title: "Venn Diagrams"
+author: "Aleksei Zverev"
+date: "2024-05-24"
+output: html_document
+---
+
+```{r setup, include=TRUE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(fig.width = 14, fig.height = 8)
+ 
+
+library('phyloseq')
+library('tidyverse')
+library('ggVennDiagram')
+
+
+set.seed(5678)
+setwd('~/Analysis/16s-amplicon-processing/')
+ps <- readRDS("ps.RData")
+ps
+```
+
+## Venn's diagram
+
+```{r}
+format_data_for_intersection <- function(ps, group){
+  physeq <- prune_taxa(taxa_sums(ps) > 0, ps)
+  groups <- levels(sample_data(physeq)[[group]] %>% as.factor())
+  data <- merge_samples(physeq, group) %>% 
+    psmelt() %>% 
+    group_by(Sample, OTU) %>% 
+    summarise(ASVs_abund = list(paste(OTU, 1:sum(Abundance))), Abund = sum(Abundance), .groups='keep') %>% 
+    filter(Abund > 0)
+  
+  asvs <- data %>% select(Sample, OTU) %>% group_by(Sample) %>% summarise(ASVs = list(OTU), .groups='keep') %>% as.list()
+  d1 <- asvs[[2]]
+  names(d1) <- asvs[[1]]
+  d1
+  
+  weighted.asvs <- data %>% select(Sample, ASVs_abund) %>% group_by(Sample) %>% summarise(ASVs = list(unlist(ASVs_abund)))
+  d2 <- weighted.asvs[[2]]
+  names(d2) <- weighted.asvs[[1]]
+  d2
+  
+  list(d1, d2)
+}
+
+vienn_from_intersects <- function(data){
+  require(ggVennDiagram)
+  
+  list(ggVennDiagram(data[[1]]) + ggtitle("ASVs") + scale_fill_distiller(palette = "OrRd", trans = "reverse"),
+       ggVennDiagram(data[[2]]) + ggtitle("Reads") + scale_fill_distiller(palette = "OrRd", trans = "reverse"))
+}
+
+find_intersections <- function(c0, c1, c2){
+  require(dplyr)
+  
+  c0_unique <- setdiff(c0, c(c1, c2))
+  intersect <- intersect(c0, intersect(c1, c2))
+  c0_c1 <- setdiff(intersect(c0, c1), c2)
+  c0_c2 <- setdiff(intersect(c0, c2), c1)
+  c(c0_unique %>% length(),
+    c0_c1 %>% length(),
+    intersect %>% length(),
+    c0_c2 %>% length())
+}
+
+p <- vienn_from_intersects(
+  format_data_for_intersection(ps %>% subset_samples(
+    Substrate %in% c("DF", "DP", "BG")), "Substrate"
+    )
+  )
+
+ggarrange(p[[1]], p[[2]])
+```
+

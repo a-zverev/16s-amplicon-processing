@@ -1,0 +1,279 @@
+---
+title: "EDA for the 16s sequencing"
+author: "Aleksei Zverev"
+date: '2023-04-10'
+output: html_document
+---
+
+## Intro
+
+```{r message=FALSE, warning=FALSE}
+library(phyloseq)
+library(ggplot2)
+library(dplyr)
+
+
+set.seed(5678)
+setwd('~/Analysis/16s-amplicon-processing/')
+```
+
+---
+
+## EDA
+
+This part includes alpha- and beta-diversity, and bargraphs
+
+#### Bargraphs
+
+`bargraphps_object, rank, threshold=0.05)`
+
+Draw a bargraph of relative abundance of different taxa in a dataset. Also result is a ggplot-object, so, it is possible add to result facet grid for group from metadata. Although unlimited number of possible sectors, only 21 unique colors are specified, so, it is better to use small number of categories 
+
+* `ps_object` - phyloseq-object
+* `rank` - taxonomical level for drawing
+* `threshold` - taxa with abundance less than the threshold will be grouped in "less than ..." category
+* return ggplot graph
+
+
+```{r fig.height=6, fig.width=8, warning=FALSE}
+# Draw barplot of relative abundance by taxa level
+bargraph <- function(ps, rank, threshold=0.05, percents=FALSE){
+  require(dplyr)
+  require(ggplot2)
+  require(phyloseq)
+  
+  ps <- prune_taxa(taxa_sums(ps) > 0, ps)
+  ps2 <- tax_glom(ps, taxrank = rank)
+  ps3 = transform_sample_counts(ps2, function(x) x / sum(x) )
+  data <- psmelt(ps3) # create dataframe from phyloseq object
+  data$Plot <- as.character(data[,rank]) # convert to character
+  data$Plot[data$Abundance < threshold] <- paste0("<", threshold, " abund.")
+  medians <- data %>% group_by(Plot) %>% mutate(median=median(data$Abundance))
+  remainder <- medians[medians$median <= threshold,]$Plot
+  data$Percentage = ifelse(data$Plot != paste0("<", threshold, " abund."),
+                           round(data$Abundance, 3), NA)
+  
+  # create palette long enough for our data
+  base.palette <- c("darkblue", "darkgoldenrod1", "darkseagreen", "darkorchid", "darkolivegreen1", "lightskyblue", 
+                    "darkgreen", "deeppink", "khaki2", "firebrick", "brown1", "darkorange1", "cyan1", "royalblue4", 
+                    "darksalmon", "dodgerblue3", "steelblue1", "darkgoldenrod1", "brown1", "cyan1", "darkgrey")
+  required.colors <- nlevels(factor(data$Plot))
+  repeats = required.colors %/% length(base.palette) + 1
+  palette <- rep(base.palette, length.out = repeats * length(base.palette))
+  
+  p <- ggplot(data=data, aes(x=Sample, y=Abundance, fill=Plot))
+  p + geom_bar(aes(), stat="identity", position="stack") + theme_light() +
+    scale_fill_manual(values = palette) +
+    theme(legend.position="bottom") + guides() +
+    theme(axis.text.x = element_text(angle = 90)) +
+    if (percents) {
+      geom_text(aes(label = Percentage),
+                position = position_stack(vjust = 0.5), size = 1.5)
+    }
+  
+}
+
+
+bargraph(ps, 'Phylum', 0.03, T)
+
+bargraph(ps, 'Phylum', 0.07) + facet_grid(~ Location, scale = 'free_x')
+```
+
+#### Alpha-diversity
+
+`alpha_div_table(ps, metric, group)`
+
+Calculate alpha-diversity indices for samples. Allows to pass columns from metadata
+
+* `ps` - phyloseq object
+* `metric` - group of metrics. Correct values are "Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher" or their group
+* `group` - specify a column, or several columns from metadata to add to alpha diversity table
+* return dataframe vith alpha-diversity indices
+
+
+`plot_alpha(ps, metric, group)`
+
+Plot specified alpha metric
+
+* `ps` - phyloseq object
+* `metric` - metric. Correct value is one from "Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"
+* `group` - specify a column from metadata to group values
+* return ggplot boxplot with points of exact values
+ 
+
+```{r, fig.width=8}
+ps.n <- rarefy_even_depth(ps, 10000)
+
+
+# Calculate several alpha-diversity indexes, return one dataframe
+alpha_div_table <- function(ps, metric, group){
+  require(phyloseq)
+  
+  ps <- prune_taxa(taxa_sums(ps) > 0, ps)
+  
+  obs_sim <- estimate_richness(ps, split = TRUE, measures = metric)
+  alpha <- cbind(sample_data(ps)[,group], obs_sim)
+  return(alpha)
+}
+
+alpha.table <- alpha_div_table(ps.n, c("Observed", "Simpson", "Shannon"), c("Location", "BioRepeat"))
+alpha.table
+```
+
+Here we can use one- or two-way ANOVA followed by Tukey pairwise test
+
+```{r}
+aov <- aov(Observed ~ Location + BioRepeat, 
+           data = alpha.table)
+summary(aov)
+
+aov <- aov(Observed ~ Location, 
+           data = alpha.table)
+summary(aov)
+TukeyHSD(aov, conf.level=0.95)
+```
+
+```{r}
+# Plot alpha-diversity by selected metric
+plot_alpha <- function(ps, group, metric) {
+  require(phyloseq)
+  require(ggplot2)
+  
+  ps_a <- prune_taxa(taxa_sums(ps) > 0, ps)
+  plot_richness(ps_a, x=group, measures=metric) + 
+    geom_boxplot() +
+    geom_point(size=1.2, alpha=0.3) + 
+    theme_light() + scale_color_brewer(palette="Dark2") +
+    theme(axis.text.x = element_text(angle = 90),
+          axis.title.x=element_blank()) +
+    labs(y=paste(metric, "index")) +
+    ggtitle(metric)
+}
+
+ggarrange(plot_alpha(ps.n, "Location", "Observed"),
+          plot_alpha(ps.n, "Location", "Simpson"), plot_alpha(ps.n, "Location", "Shannon"),
+          nrow = 1, ncol = 3)
+
+```
+
+In our data there is two categories - different locations and different biological repeats. From ANOVA we know, that the location is the strongest factor, but we also want to reflect biological repeats influence. In this case, we can do this:
+
+```{r}
+alpha_div_plot <- function(data, index, main_group, aux_group=NA){
+  
+      # get list of significant pairs for brackets
+  high.rank.comparison <- pairwise.wilcox.test(data[,index], data[,main_group])$p.value %>%
+    reshape2:::melt.matrix() %>% # fucking magic, this func isn't in reshape2 namespace
+    filter(value < 0.05) %>%
+    dplyr::select(Var1, Var2) %>% 
+    t() %>% as.data.frame() %>% 
+    as.list()
+  
+  if(is.na(aux_group)){
+    
+    ggplot(data = data, aes(x = data[,main_group], y = data[,index])) +
+      geom_boxplot(color="grey70") +
+      geom_point(size=1.8, position=position_dodge(width=0.25)) +
+      stat_compare_means(aes(group = main_group), comparisons=high.rank.comparison, method = "wilcox.test", size = 3, hide.ns = T) +
+      theme_light() + theme(axis.title.x=element_blank(),
+                        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5)) +
+      ggtitle(index) + ylab(index)
+    
+  } else {
+
+    ggplot(data = data, aes(x = data[,main_group], y = data[,index])) +
+      geom_boxplot(color="grey70") +
+      geom_point(size=1.8, aes(color = data[,aux_group]), position=position_dodge(width=0.25)) +
+      stat_compare_means(aes(group = aux_group), label = "p.signif", method = "anova", label.y.npc = "bottom", size = 3, vjust = 2)+
+      stat_compare_means(aes(group = main_group), comparisons=high.rank.comparison, method = "wilcox.test", size = 3, hide.ns = T) +
+      theme_light() + theme(axis.title.x=element_blank(),
+                          axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5)) +
+      ggtitle(index) + ylab(index)
+  }
+  
+}
+
+alpha_div_plot(alpha.table, "Observed", "Location", "BioRepeat")
+alpha_div_plot(alpha.table, "Observed", "Location")
+```
+
+
+#### Beta-diversity
+
+`beta_plot(ps, method, distance, ...))`
+
+Short function to draw beta diversity plot
+
+* `ps` - phyloseq object
+* `method` - method of ordination. Values are "PCoA", "NMDS"
+* `...` - allows to pass arguments to `plot_ordination` function. Can be used for determination of color and shape
+* return ggplot scatterplot with distances between samples
+
+
+```{r, fig.width=8}
+beta_plot <- function(ps, method, distance, ...){
+  require(phyloseq)
+  require(ggplot2)
+  
+  ps.prop <- transform_sample_counts(ps, function(x) x/sum(x))
+  ords <- ordinate(ps.prop, method=method, distance=distance)
+  plot_ordination(ps.prop, ords, title=deparse(substitute(ps)), ...) +
+    geom_point(size=3, alpha=0.7) + 
+    theme_light()
+}
+
+beta_plot(ps, 'PCoA', 'bray', color = "Sample", shape = "BioRepeat")
+```
+
+
+---
+
+## Differential abundance
+
+Here we try to find ASVs, which abundance significantly different in comparison within two groups. For that, we will use DeSEQ2 package. In this function, we perform comparison of two groups and return table of ASVs, significantly different from each other (p-adj < 0.05) alongside DeSEQ2 metrics.
+
+`sig_table(ps_object, formula, threshold)`
+
+Construct table of significant ASVs according DeSEQ2, merge it with abundance table
+
+* `ps_object` - phyloseq object
+* `formula` - formula ~var_name for grouping dataset (in our case - ~Source)
+* `threshold` - baseMean and log2FoldChange, determined for filtering of deseq2 table. Use this variable as vector - c(baseMean, log2FoldChange)
+* return dataframe of ASVs, their parameters in DeSEQ2 comparison and taxonomy
+
+
+`draw_sig_table(sig_table, rank)`
+
+Draw a plot by significant table
+
+* `sig_table` - table of significant ASVs from `sig_table` function
+* `rank` - taxonomical level of plot
+
+
+```{r, fig.height=12, fig.width=8}
+
+
+
+table <- sig_table(ps, ~Location, c(10, 2))
+head(table)
+
+
+draw_sig_table(table, 'Family')
+```
+
+`plot_heatmap(ps, group = "SampleID", log.transform = TRUE)`
+
+Plot a heatmap by phyloseq object. Use minimal taxonomic level (Genus), and group samples by any category from metadata
+
+* `ps` - phyloseq object
+* `group` - group samples (by mean abundance). Column from the metadata
+* `log.transform` - log-transformation of abundance. Can be `TRUE` or `FALSE`
+
+```{r, fig.height=12, fig.width=8}
+# prune phyloseq according %sig_table% result
+sig.ps <- prune_taxa(rownames(table), ps)
+
+plot_heatmap(sig.ps, group = "SampleID", log.transform = TRUE)
+```
+
+---

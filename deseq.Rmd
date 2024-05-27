@@ -1,0 +1,26 @@
+---
+title: "DeSEQ2"
+author: "Aleksei Zverev"
+date: "2024-05-24"
+output: html_document
+---
+
+```{r setup, include=TRUE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(fig.width = 14, fig.height = 8)
+ 
+
+library('phyloseq')
+library('tidyverse')
+library('ggVennDiagram')
+
+
+set.seed(5678)
+setwd('~/Analysis/16s-amplicon-processing/')
+ps <- readRDS("ps.RData")
+ps
+```
+
+```{r}
+
+```
+
