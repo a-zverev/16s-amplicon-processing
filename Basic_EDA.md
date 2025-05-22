@@ -7,7 +7,8 @@ output:
     keep_md: yes
 ---
 
-```{r setup, include=TRUE, warning = FALSE, message = FALSE}
+
+```r
 knitr::opts_chunk$set(fig.width = 14, fig.height = 8)
  
 
@@ -22,18 +23,59 @@ ps <- readRDS("ps.RData")
 ps
 ```
 
+```
+## phyloseq-class experiment-level object
+## otu_table()   OTU Table:         [ 8785 taxa and 36 samples ]
+## sample_data() Sample Data:       [ 36 samples by 6 sample variables ]
+## tax_table()   Taxonomy Table:    [ 8785 taxa by 7 taxonomic ranks ]
+## refseq()      DNAStringSet:      [ 8785 reference sequences ]
+```
+
 ## Brief view on samples
 
-```{r}
+
+```r
 sample_sums(ps) %>% sort()
+```
+
+```
+## U3.C.2 U3.C.1 U3.C.4 U1.C.4 U1.A.3 U3.C.3 U1.A.4 U3.B.1 U1.B.4 U1.B.1 U3.B.2 
+##  11982  13511  13598  14890  15011  15174  15280  15499  15764  15796  15801 
+## U1.B.3 U3.A.1 U3.A.4 U3.B.3 U1.A.1 U1.C.1 U3.A.2 U1.B.2 U1.A.2 U3.A.3 U2.C.1 
+##  15947  16117  16128  16140  16225  16295  16315  16389  17061  17080  17291 
+## U2.A.1 U2.A.3 U3.B.4 U2.C.4 U2.B.2 U2.B.4 U2.C.2 U2.A.2 U2.B.1 U2.A.4 U2.B.3 
+##  17473  17537  17581  17874  17895  18087  18534  18871  18896  18933  19017 
+## U2.C.3 U1.C.2 U1.C.3 
+##  19019  24402  30559
+```
+
+```r
 taxa_sums(ps) %>% log() %>%  hist()
+```
+
+![](Basic_EDA_files/figure-html/unnamed-chunk-1-1.png)<!-- -->
+
+```r
 ps@sam_data[1:8,]
+```
+
+```
+##        SampleID           Filename Group BioRepeat TechRepeat    Location
+## U1.A.1   U1.A.1 Abakumov-SEQ126-37    U1         A          1 Quarry Clay
+## U1.A.2   U1.A.2 Abakumov-SEQ126-38    U1         A          2 Quarry Clay
+## U1.A.3   U1.A.3 Abakumov-SEQ126-39    U1         A          3 Quarry Clay
+## U1.A.4   U1.A.4 Abakumov-SEQ126-40    U1         A          4 Quarry Clay
+## U1.B.1   U1.B.1 Abakumov-SEQ126-41    U1         B          1 Quarry Clay
+## U1.B.2   U1.B.2 Abakumov-SEQ126-42    U1         B          2 Quarry Clay
+## U1.B.3   U1.B.3 Abakumov-SEQ126-43    U1         B          3 Quarry Clay
+## U1.B.4   U1.B.4 Abakumov-SEQ126-44    U1         B          4 Quarry Clay
 ```
 
 
 ## Plot barplots
 
-```{r}
+
+```r
 # Draw barplot of relative abundance by taxa level
 bargraph <- function(ps, rank, threshold=0.05, percents=FALSE){
   require(dplyr)
@@ -79,12 +121,18 @@ bargraph <- function(ps, rank, threshold=0.05, percents=FALSE){
 
 bargraph(ps, "Phylum", 0.02) +
   facet_grid(cols = vars(Group, BioRepeat), scales = "free", space = "free")
+```
+
+![](Basic_EDA_files/figure-html/unnamed-chunk-2-1.png)<!-- -->
+
+```r
 # ggsave("bars.tiff", units="in", width=12, height=8, dpi=300, compression = 'lzw')
 ```
 
 ## Heatmap
 
-```{r fig.height=18}
+
+```r
 plot_heatmap <- function(ps, taxa = "Genus", log.transform = TRUE){
   require(dplyr)
   require(phyloseq)
@@ -123,9 +171,12 @@ plot_heatmap(ps.major, taxa = "Family") +
              cols = vars(Group, BioRepeat), scales = "free", space = "free")
 ```
 
+![](Basic_EDA_files/figure-html/unnamed-chunk-3-1.png)<!-- -->
+
 ## Alpha-diversity
 
-```{r}
+
+```r
 # Calculate several alpha-diversity indexes, return one dataframe
 alpha_div_table <- function(ps, metric, cols_to_keep){
   require(phyloseq)
@@ -140,12 +191,87 @@ alpha_div_table <- function(ps, metric, cols_to_keep){
 
 
 sample_sums(ps) %>% sort()
+```
+
+```
+## U3.C.2 U3.C.1 U3.C.4 U1.C.4 U1.A.3 U3.C.3 U1.A.4 U3.B.1 U1.B.4 U1.B.1 U3.B.2 
+##  11982  13511  13598  14890  15011  15174  15280  15499  15764  15796  15801 
+## U1.B.3 U3.A.1 U3.A.4 U3.B.3 U1.A.1 U1.C.1 U3.A.2 U1.B.2 U1.A.2 U3.A.3 U2.C.1 
+##  15947  16117  16128  16140  16225  16295  16315  16389  17061  17080  17291 
+## U2.A.1 U2.A.3 U3.B.4 U2.C.4 U2.B.2 U2.B.4 U2.C.2 U2.A.2 U2.B.1 U2.A.4 U2.B.3 
+##  17473  17537  17581  17874  17895  18087  18534  18871  18896  18933  19017 
+## U2.C.3 U1.C.2 U1.C.3 
+##  19019  24402  30559
+```
+
+```r
 ps.raref <- rarefy_even_depth(ps)
+```
+
+```
+## You set `rngseed` to FALSE. Make sure you've set & recorded
+##  the random seed of your session for reproducibility.
+## See `?set.seed`
+```
+
+```
+## ...
+```
+
+```
+## 55OTUs were removed because they are no longer 
+## present in any sample after random subsampling
+```
+
+```
+## ...
+```
+
+```r
 alpha <- alpha_div_table(ps.raref, 
                          metric = c("Observed", "Simpson"),
                          cols_to_keep = c("Group", "BioRepeat"))
-alpha
+```
 
+```
+## You set `rngseed` to FALSE. Make sure you've set & recorded
+##  the random seed of your session for reproducibility.
+## See `?set.seed`
+## 
+## ...
+```
+
+```
+## 71OTUs were removed because they are no longer 
+## present in any sample after random subsampling
+```
+
+```
+## ...
+```
+
+```r
+alpha
+```
+
+```
+## # A tibble: 72 × 4
+##    Group BioRepeat Metric      value
+##    <chr> <chr>     <chr>       <dbl>
+##  1 U1    A         Observed 2108    
+##  2 U1    A         Simpson     0.999
+##  3 U1    A         Observed 2101    
+##  4 U1    A         Simpson     0.998
+##  5 U1    A         Observed 2076    
+##  6 U1    A         Simpson     0.998
+##  7 U1    A         Observed 2082    
+##  8 U1    A         Simpson     0.998
+##  9 U1    B         Observed 1994    
+## 10 U1    B         Simpson     0.998
+## # ℹ 62 more rows
+```
+
+```r
 ggplot(alpha, aes(Group, value)) +
   geom_point(aes(color = BioRepeat)) +
   facet_wrap(~Metric, scales = "free_y")+
@@ -153,9 +279,12 @@ ggplot(alpha, aes(Group, value)) +
   xlab("") + ylab("")
 ```
 
+![](Basic_EDA_files/figure-html/unnamed-chunk-4-1.png)<!-- -->
+
 ## Beta-diversity
 
-```{r}
+
+```r
 # Plot beta-diversity
 beta_plot <- function(ps, method, distance, ...){
   require(phyloseq)
@@ -173,6 +302,8 @@ beta_plot(ps,
           method = "PCoA", distance = "bray", 
           color="Group", shape = "BioRepeat")
 ```
+
+![](Basic_EDA_files/figure-html/unnamed-chunk-5-1.png)<!-- -->
 
 ## Ideas to check
 
