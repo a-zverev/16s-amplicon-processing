@@ -1,0 +1,43 @@
+Filename,Type,Group,Treatment,Dosage
+PE6,ITS,Experiment,Control,control
+PE7,ITS,Experiment,Control,control
+PE8,ITS,Experiment,Control,control
+PE9,ITS,Experiment,Control,control
+PE10,ITS,Experiment,Control,control
+PE11,ITS,Experiment,Control,control
+PE15,ITS,Experiment,Poultry manure,single
+PE16,ITS,Experiment,Poultry manure,single
+PE17,ITS,Experiment,Poultry manure,single
+PE18,ITS,Experiment,Poultry manure,single
+PE19,ITS,Experiment,Poultry manure,single
+PE20,ITS,Experiment,Poultry manure,single
+PE24,ITS,Experiment,Poultry manure,double
+PE25,ITS,Experiment,Poultry manure,double
+PE26,ITS,Experiment,Poultry manure,double
+PE27,ITS,Experiment,Poultry manure,double
+PE28,ITS,Experiment,Poultry manure,double
+PE29,ITS,Experiment,Poultry manure,double
+PE33,ITS,Experiment,Rapid fermentation,single
+PE34,ITS,Experiment,Rapid fermentation,single
+PE35,ITS,Experiment,Rapid fermentation,single
+PE36,ITS,Experiment,Rapid fermentation,single
+PE37,ITS,Experiment,Rapid fermentation,single
+PE38,ITS,Experiment,Rapid fermentation,single
+PE42,ITS,Experiment,Rapid fermentation,double
+PE43,ITS,Experiment,Rapid fermentation,double
+PE44,ITS,Experiment,Rapid fermentation,double
+PE45,ITS,Experiment,Rapid fermentation,double
+PE46,ITS,Experiment,Rapid fermentation,double
+PE47,ITS,Experiment,Rapid fermentation,double
+PE51,ITS,Experiment,Long fermentation,single
+PE52,ITS,Experiment,Long fermentation,single
+PE53,ITS,Experiment,Long fermentation,single
+PE54,ITS,Experiment,Long fermentation,single
+PE55,ITS,Experiment,Long fermentation,single
+PE56,ITS,Experiment,Long fermentation,single
+PE60,ITS,Experiment,Long fermentation,double
+PE61,ITS,Experiment,Long fermentation,double
+PE62,ITS,Experiment,Long fermentation,double
+PE63,ITS,Experiment,Long fermentation,double
+PE64,ITS,Experiment,Long fermentation,double
+PE65,ITS,Experiment,Long fermentation,double

@@ -1,0 +1,115 @@
+---
+title: "Base R template for ITS amplicon processing"
+output: 
+  html_document: 
+    keep_md: yes
+    toc: yes
+    toc_float: yes
+    toc_collapsed: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Load required libraries
+library(dada2)
+library(Biostrings)
+library(DECIPHER)
+library(phyloseq)
+library(tidyverse)
+library(telegramNotify) # custom notification package
+
+# Load helper functions
+source('functions.R')
+set.seed(5678)
+```
+
+# Read metadata
+
+`read_metadata(filename, sample.names, ...)`
+
+Read metadata, assign sample names as rownames (important for downstream analysis).
+
+```{r}
+mdat <- read_metadata(filename = "its_map.csv",
+                      sample.names = "Filename",
+                      sep = ",",
+                      check_files = "its_raw/")
+mdat
+```
+
+# Primer trimming
+
+Use `cutadapt` to remove ITS primers.
+
+```{r}
+trim_ITS_primers(raw_files_path = "its_raw/",
+                  FWD = "GTGARTCATCGARTCTTTG",     # gITS7
+                  REV = "TCCTCCGCTTATTGATATGC",    # ITS4
+                  cutadapt = "/home/anaconda/conda/envs/bioinf/bin/cutadapt")
+```
+
+# ASV picking
+
+Run DADA2 pipeline for ITS sequences.
+
+```{r}
+notified_reads_to_seqtable_ITS <- notify_on_error(fun = reads_to_seqtable_ITS, 
+                                          task_name = "ITS ASV picking",
+                                          notify_success = TRUE)
+
+seqtab <- notified_reads_to_seqtable_ITS(raw_files_path = "its_raw/cutadapt/",
+                               trimLeft = c(0, 0),
+                               truncLen = c(0, 0),
+                               log_file = "its_processing.log",
+                               pool = "pseudo",
+                               cores = TRUE,
+                               maxEE = c(2, 5),
+                               pattern = c("_L2_1.fq.gz", "_L2_2.fq.gz"),
+                               plot_profile = TRUE)
+```
+
+# Taxonomic assignment
+
+Assign taxonomy using UNITE database.
+
+```{r}
+notified_assign_taxonomy <- notify_on_error(fun = assign_taxonomy, 
+                                          task_name = "ITS Taxonomy",
+                                          notify_success = TRUE)
+
+taxa <- notified_assign_taxonomy(seqtab = seqtab, 
+                        set_train_path = '~/tax_n_refs/sh_general_release_dynamic_s_all_04.04.2024.fasta',
+                        cores = TRUE)
+```
+
+# Phyloseq object assembly
+
+Combine ASV table, taxonomy, and metadata into a `phyloseq` object.
+
+```{r}
+notified_assemble_phyloseq_ITS <- notify_on_error(fun = assemble_phyloseq_ITS, 
+                                          task_name = "Assembly of the phyloseq-object",
+                                          notify_success = TRUE)
+
+ps <- notified_assemble_phyloseq_ITS(seqtab = seqtab, 
+                        metadata = mdat,
+                        taxonomy = taxa)
+saveRDS(ps, "fungi.RData")
+```
+
+# Basic stats
+
+Explore the dataset: number of taxa, reads per sample, taxonomy and ASV tables. Save `phyloseq` object to `.RData` file.
+
+```{r}
+sample_names(ps) # Names of samples
+sample_sums(ps)  # Number of reads per sample
+
+tax_table(ps)[1:5, 1:4] # First rows of taxonomy table
+otu_table(ps)[1:4, 1:5] # First rows of ASV table
+
+ps@sam_data # Metadata
+```

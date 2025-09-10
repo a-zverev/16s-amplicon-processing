@@ -1,28 +1,16 @@
 ---
 title: "Base R template for 16s amplicon processing"
 output: 
-  html_document:
+  html_document: 
     keep_md: yes
-    toc: true
-    toc_float: true
-    toc_collapsed: true
-    toc_depth: 5
-    number_sections: true
-    theme: lumen
-    code_folding: hide
+    toc: yes
+    toc_float: yes
+    toc_collapsed: yes
 ---
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 
 ## Intro
 
 This pipeline offers an attempt to standardize procedure of soil 16S rDNA Illumina reads processing in ARRIAM. Most operations are performed by R libraries and are covered in functions. Here we talk about the most common way of the analysis - for the tuning or for more details you have to manipulate with the functions themselves, in [functions.R](/functions.R) or use them for the building of your own pipeline. 
-
-As a rule, raw reads processing is more conservative, whereas the EDA and the plotting require more tuning. Routinely I use [functions](/functions.R) for the raw reads processing, and then use the [EDA](/eda.md) template for the EDA. In the template where I can directly modify any function according to my needs.
-
-I also strongly recommend to save the data in `.RData` files after merging the phyloseq object.
 
 Required libraries:
 
@@ -42,9 +30,6 @@ Required libraries:
 
 Load required libraries. Please, install them, if you don't have it. Also, import functions, set your working directory and the random seed.
 
-In our test data, we will see at the microbial communities on abandoned and reclaimed 
-mining sites in the Komi Republic (data are obtained from [this article](https://doi.org/10.3390/microorganisms11030720)).
-
 ```{r message=FALSE, warning=FALSE}
 library(dada2)
 library(Biostrings)
@@ -55,8 +40,6 @@ library(tidyverse)
 
 source('functions.R')
 set.seed(5678)
-
-setwd('~/Analysis/16s-amplicon-processing/')
 ```
 
 
@@ -68,155 +51,11 @@ For processing of data, we need to specify a way to raw data, and file with meta
 
 Functions in this module are:
 
-#### Read metadata
+### 16S reads processing
 
-`read_metadata(filename, sample.names, ...)`
+[16S pipeline](16S_pipeline.md)
 
-Read a metadata file, add desirable sample names to rownames (it is important for the downstream analysis). It is reasonable to use patterns for the fast identification of samples. For example, in this dataset the pattern is <GROUP>.<BIOREPEAT>.<TRCHREPEAT> (U2.A.2, or U1.C.3), so the name itself is enough for the complete identification of the sample.
+### ITS reads processing
 
-* `filename` - name of metadata file
-* `sample.names` - column with names, which you want to see in downstream analysis. Be sure, that names are unique
-* `...` - you also can pass any information to `read.csv()` function (for example, the separator `sep=("\t")`)
-* return a dataframe, rownames are from `sample.names` column
+[ITS pipeline](ITS_pipeline.md)
 
-```{r}
-mdat <- read_metadata(filename = 'map.csv',
-                      sample.names = "SampleID",
-                      sep = '\t')
-mdat
-```
-
-#### dada2 pipeline 
-
-`reads_to_seqtable_by_dada2(raw_files_path, trimLeft, truncLen, pool=TRUE, cores=TRUE)`
-
-Process reads, plot quality data and show basic stats by all steps (also saves it to `processing.log` file).
-
-* `raw_files_path` - source to raw .fastq.gz files
-* `trimLeft` - if you want to cut primers from ends, use this variable as vector - c(len_forward, len_reverse)
-* `truncLen` - specify the maximum length of reads, also use this variable as vector
-* `pool` - pooling strategy. Options are `TRUE`, `"pseudo"` or `FALSE`. See [dada2](https://benjjneb.github.io/dada2/tutorial.html) manual.
-* `cores` - number of cores for analysis. Use `TRUE` for all available
-* return ASV table and their abundance in samples
-
-```{r, cache=TRUE}
-seqtab <- reads_to_seqtable_by_dada2(raw_files_path = 'raw',
-                                     trimLeft = c(19, 20), 
-                                     truncLen = c(220,180),
-                                     cores = 30)
-```
-
-Looks good :)
-
-### Rename ASV table
-
-`rename_seqtab_by_metadata(seqtab, metadata, old.names)`
-
-According dada2 pipeline, default names of samples in seqtable are derived from names of the raw files. In most cases, these names are useless, so we have to rename samples according our desirable names from the metadata.
-
-* `seqtab` - ASV table from `reads_to_seqtable_by_dada2` function
-* `metadata` - metadata dataframe from `read_metadata` function
-* `old.names` - specify the `metadata` column with raw file names. If everything is right, this names should be same with current rownames of `seqtab`
-* return ASV table with renamed samples
-
-```{r}
-seqtab2 <- rename_seqtab_by_metadata(seqtab = seqtab,
-                                     metadata = mdat,
-                                     old.names = "Filename")
-rownames(seqtab2)
-```
-
-### Assign taxonomy
-
-`assign_taxonomy(seqtab, set_train_path, train_set_species_path, cores = TRUE)`
-
-Assign taxonomy by Bayesian naive classifier
-
-* `seqtab` - ASV table from `reads_to_seqtable_by_dada2` function
-* `set_train_path` - way to trained SILVA database fastas (see more in dada2 pipeline [here](https://benjjneb.github.io/dada2/tutorial.html))
-* `train_set_species_path` - way to SILVA species fastas (see more in dada2 pipeline [here](https://benjjneb.github.io/dada2/tutorial.html))
-* `cores` - number of cores for analysis. Use TRUE for all available
-* return taxonomy table
-
-```{r, cache=TRUE}
-taxa <- assign_taxonomy(seqtab = seqtab2, 
-                        set_train_path = '~/tax_n_refs/silva_nr_v132_train_set.fa.gz', 
-                        train_set_species_path = '~/tax_n_refs/silva_species_assignment_v132.fa.gz',
-                        cores = 30)
-```
-
-### Assemble phyloseq object
-
-`assemble_phyloseq(seqtab, metadata, taxonomy, filter.organells = T, write_fasta = TRUE)`
-
-Assemble phyloseq object from components (except tree)
-
-* `seqtab` - ASV table from `rename_seqtab_by_metadata` function
-* `metadata` - metadata dataframe from `read_metadata` function
-* `taxonomy` - taxonomy from `assign_taxonomy` function
-* `filter.organells` - filter all entries, attributes as "Mitochondria" or "Chloroplast". Can be `TRUE` or `FALSE`
-* `write_fasta` - allows to write a fasta file of reference sequences in a specified fastq-file
-* return phyloseq object
-
-
-```{r}
-ps <- assemble_phyloseq(seqtab = seqtab2,
-                        metadata = mdat, 
-                        taxonomy = taxa, 
-                        filter.organells = TRUE, 
-                        write_fasta = 'refseqs.fasta')
-
-saveRDS(ps, "ps.RData")
-
-ps
-```
-
-### Construct tree via QIIME2
-
-```{r}
-system2(c('./build_tree.sh', 'refseqs.fasta'))
-tree <- ape::read.tree('tree.nwk')
-ps <- merge_phyloseq(ps, tree)
-
-ps
-```
-
-
-
-
-## Basic stats
-
-Feel free to explore the data and understand, how many taxa we have, reads per sample number and taxonomical structure. If necessary, you can save the ASVs table and the taxonomy in .csv file and explore in Excel
-
-```{r}
-sample_names(ps) # Names of samples
-sample_sums(ps) # Sum of reads per sample
-
-
-tax_table(ps)[1:5, 1:4] # Taxonomy table
-otu_table(ps)[1:4, 1:5] # ASV table
-
-plot(width(ps@refseq)) # length of references
-
-ps@sam_data # metadata
-```
-
-`write_ASVs_table(ps, filename)`
-
-Expornt ASVs table and taxonomic annotation in the .csv file
-
-* `ps` - phyloseq object
-* `filename` - filename to write the data
-
-```{r}
-# Write table as .csv
-write_ASVs_table <- function(ps, filename){
-  write.csv(cbind(ps@otu_table %>% t() %>%  data.frame(),
-                  ps@tax_table %>% data.frame()),
-            filename)
-}
-```
-
-## EDA and analysis
-
-Downstream analysis is a bit more complex, so it will be described in [EDA](/eda.md) module

@@ -1,0 +1,43 @@
+Filename,Type,Group,Treatment,Dosage
+S246,16S,Experiment,Control,control
+S247,16S,Experiment,Control,control
+S248,16S,Experiment,Control,control
+S249,16S,Experiment,Control,control
+S250,16S,Experiment,Control,control
+S251,16S,Experiment,Control,control
+S255,16S,Experiment,Poultry manure,single
+S256,16S,Experiment,Poultry manure,single
+S257,16S,Experiment,Poultry manure,single
+S258,16S,Experiment,Poultry manure,single
+S259,16S,Experiment,Poultry manure,single
+S260,16S,Experiment,Poultry manure,single
+S264,16S,Experiment,Poultry manure,double
+S265,16S,Experiment,Poultry manure,double
+S266,16S,Experiment,Poultry manure,double
+S267,16S,Experiment,Poultry manure,double
+S268,16S,Experiment,Poultry manure,double
+S269,16S,Experiment,Poultry manure,double
+S273,16S,Experiment,Rapid fermentation,single
+S274,16S,Experiment,Rapid fermentation,single
+S275,16S,Experiment,Rapid fermentation,single
+S276,16S,Experiment,Rapid fermentation,single
+S277,16S,Experiment,Rapid fermentation,single
+S278,16S,Experiment,Rapid fermentation,single
+S282,16S,Experiment,Rapid fermentation,double
+S283,16S,Experiment,Rapid fermentation,double
+S284,16S,Experiment,Rapid fermentation,double
+S285,16S,Experiment,Rapid fermentation,double
+S286,16S,Experiment,Rapid fermentation,double
+S287,16S,Experiment,Rapid fermentation,double
+S291,16S,Experiment,Long fermentation,single
+S292,16S,Experiment,Long fermentation,single
+S293,16S,Experiment,Long fermentation,single
+S294,16S,Experiment,Long fermentation,single
+S295,16S,Experiment,Long fermentation,single
+S296,16S,Experiment,Long fermentation,single
+S300,16S,Experiment,Long fermentation,double
+S301,16S,Experiment,Long fermentation,double
+S302,16S,Experiment,Long fermentation,double
+S303,16S,Experiment,Long fermentation,double
+S304,16S,Experiment,Long fermentation,double
+S305,16S,Experiment,Long fermentation,double
