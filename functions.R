@@ -6,6 +6,7 @@ library(ggplot2)
 library(dplyr)
 library(DESeq2)
 
+
 # Dada2 pipeline follows to sequence table
 reads_to_seqtable_16s <- function(raw_files_path,
                                   trimLeft,

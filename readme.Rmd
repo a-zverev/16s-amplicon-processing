@@ -10,7 +10,7 @@ output:
 
 ## Intro
 
-This pipeline offers an attempt to standardize procedure of soil 16S rDNA Illumina reads processing in ARRIAM. Most operations are performed by R libraries and are covered in functions. Here we talk about the most common way of the analysis - for the tuning or for more details you have to manipulate with the functions themselves, in [functions.R](/functions.R) or use them for the building of your own pipeline. 
+This pipeline offers an attempt to standardize procedure of soil 16S and ITS rDNA Illumina reads processing in ARRIAM. Most operations are performed by R libraries and are covered in functions. Here we talk about the most common way of the analysis - for the tuning or for more details you have to manipulate with the functions themselves, in [functions.R](/functions.R) or use them for the building of your own pipeline. 
 
 Required libraries:
 

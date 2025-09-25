@@ -28,8 +28,6 @@ set.seed(5678)
 
 # Read metadata
 
-`read_metadata(filename, sample.names, ...)`
-
 Read metadata, assign sample names as rownames (important for downstream analysis).
 
 ```{r}
@@ -37,14 +35,14 @@ mdat <- read_metadata(filename = "16s_map.csv",
                       sample.names = "Filename",
                       sep = ",",
                       check_files = "16s_raw/")
-mdat
+mdat %>% head()
 ```
 
 # ASV picking
 
 Run DADA2 pipeline for 16S sequences.
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 notified_reads_to_seqtable_16s <- notify_on_error(fun = reads_to_seqtable_16s, 
                                           task_name = "16S ASV picking",
                                           notify_success = TRUE)
@@ -59,7 +57,7 @@ seqtab <- notified_reads_to_seqtable_16s(raw_files_path = "16s_raw",
                                 pattern = c("_L2_1.fq.gz", "_L2_2.fq.gz"),
                                 plot_profile = TRUE)
 
-# telegramNotify::send_telegram_file("16S_processing.txt")
+send_telegram_file("16S_processing.log")
 ```
 
 # Taxonomic assignment
