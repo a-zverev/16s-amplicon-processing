@@ -432,41 +432,41 @@ assemble_phyloseq_ITS <- function(seqtab, metadata, taxonomy) {
 }
 
 # Write ASVs table from ps-object
-# write_ASVs_table <- function(ps, filename, tax_level = NA) {
-#   require(phyloseq)
-#   require(dplyr)
-#   
-#   # If tax_level is specified, aggregate using tax_glom
-#   if (!is.na(tax_level)) {
-#     if (!(tax_level %in% colnames(tax_table(ps)))) {
-#       stop("Specified tax_level not found in tax_table.")
-#     }
-#     ps <- tax_glom(ps, taxrank = tax_level, NArm = FALSE)
-#   }
-#   
-#   # Extract abundance data
-#   otu_df <- as.data.frame(t(otu_table(ps)))
-#   
-#   # Extract taxonomy
-#   tax_df <- as.data.frame(tax_table(ps))
-#   
-#   # Define taxon names
-#   tax_names <- rownames(otu_df)
-#   
-#   # Add taxon IDs
-#   otu_df$Taxon <- rownames(otu_df)
-#   tax_df$Taxon <- rownames(tax_df)
-#   
-#   # Join abundance and taxonomy
-#   merged_df <- left_join(otu_df, tax_df, by = "Taxon")
-#   
-#   # Move Taxon column to front
-#   merged_df <- merged_df[, c("Taxon", setdiff(colnames(merged_df), "Taxon"))]
-#   
-#   # Write to CSV
-#   write.csv(merged_df, file = filename, row.names = FALSE)
-#   message("Table written to: ", filename)
-# }
+write_ASVs_table <- function(ps, filename, tax_level = NA) {
+  require(phyloseq)
+  require(dplyr)
+
+  # If tax_level is specified, aggregate using tax_glom
+  if (!is.na(tax_level)) {
+    if (!(tax_level %in% colnames(tax_table(ps)))) {
+      stop("Specified tax_level not found in tax_table.")
+    }
+    ps <- tax_glom(ps, taxrank = tax_level, NArm = FALSE)
+  }
+
+  # Extract abundance data
+  otu_df <- as.data.frame(t(otu_table(ps)))
+
+  # Extract taxonomy
+  tax_df <- as.data.frame(tax_table(ps))
+
+  # Define taxon names
+  tax_names <- rownames(otu_df)
+
+  # Add taxon IDs
+  otu_df$Taxon <- rownames(otu_df)
+  tax_df$Taxon <- rownames(tax_df)
+
+  # Join abundance and taxonomy
+  merged_df <- left_join(otu_df, tax_df, by = "Taxon")
+
+  # Move Taxon column to front
+  merged_df <- merged_df[, c("Taxon", setdiff(colnames(merged_df), "Taxon"))]
+
+  # Write to CSV
+  write.csv(merged_df, file = filename, row.names = FALSE)
+  message("Table written to: ", filename)
+}
 
 # Write ASVs table from ps-object
 write_ASVs_table <- function(ps, filename, tax_level = NA) {
@@ -500,6 +500,111 @@ write_ASVs_table <- function(ps, filename, tax_level = NA) {
   # Write to CSV
   write.csv(merged_df, file = filename, row.names = FALSE)
   message("Table written to: ", filename)
+}
+
+# Draw barplot of relative abundance by taxa level
+bargraph <- function(ps, rank, threshold=0.05, percents=FALSE){
+  require(dplyr)
+  require(ggplot2)
+  require(phyloseq)
+  
+  ps <- prune_taxa(taxa_sums(ps) > 0, ps)
+  ps2 <- tax_glom(ps, taxrank = rank)
+  ps3 = transform_sample_counts(ps2, function(x) x / sum(x) )
+  data <- psmelt(ps3) # create dataframe from phyloseq object
+  data$Plot <- as.character(data[,rank]) # convert to character
+  data$Plot[data$Abundance < threshold] <- paste0("<", threshold, " abund.")
+  medians <- data %>% group_by(Plot) %>% mutate(median=median(data$Abundance))
+  remainder <- medians[medians$median <= threshold,]$Plot
+  data$Percentage = ifelse(data$Plot != paste0("<", threshold, " abund."),
+                           round(data$Abundance, 3)*100, NA)
+  
+  # create palette long enough for our data
+  base.palette <- c("darkblue", "darkgoldenrod1", "darkseagreen", "darkorchid", "darkolivegreen1", "lightskyblue", 
+                    "darkgreen", "deeppink", "khaki2", "firebrick", "brown1", "darkorange1", "cyan1", "royalblue4", 
+                    "darksalmon", "dodgerblue3", "steelblue1", "darkgoldenrod1", "brown1", "cyan1", "darkgrey")
+  required.colors <- nlevels(factor(data$Plot))
+  repeats = required.colors %/% length(base.palette) + 1
+  palette <- rep(base.palette, length.out = repeats * length(base.palette))
+  
+  ggplot(data=data, aes(x=Sample, y=Abundance, fill=Plot)) +
+    geom_bar(stat="identity", position="stack") + 
+    theme_light() +
+    guides() +
+    scale_fill_manual(values = palette) +
+    scale_y_continuous(limits = c(0,1), 
+                       expand = expansion(mult = c(.01, .01))) +
+    ylab("Relative Abundance") +
+    xlab("Samples") +
+    theme(legend.position="bottom",
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank()) +
+    if (percents) {
+      geom_text(aes(label = Percentage),
+                position = position_stack(vjust = 0.5), size = 1.5)
+    }
+}
+
+plot_heatmap <- function(ps, X, taxa = "Genus", log.transform = TRUE){
+  require(dplyr)
+  require(phyloseq)
+  require(ggplot2)
+  
+  # Remove taxa with zero total abundance
+  ps <- prune_taxa(taxa_sums(ps) > 0, ps)
+  
+  tax_ranks <- colnames(ps@tax_table)
+  
+  # Prepare taxonomy as data.frame of characters
+  tax_df <- as.data.frame(ps@tax_table, stringsAsFactors = FALSE)
+  tax_df[] <- lapply(tax_df, function(x) if (is.factor(x)) as.character(x) else as.character(x))
+  
+  # Fill chosen rank with fallback "NA // <nearest higher rank>" BEFORE tax_glom
+  fill_one <- function(row_vec) {
+    rr <- as.list(row_vec)
+    val <- rr[[taxa]]
+    if (!is.null(val) && !is.na(val) && nzchar(val)) return(val)
+    
+    idx <- match(taxa, tax_ranks)
+    if (!is.na(idx) && idx > 1) {
+      for (hr in rev(tax_ranks[1:(idx - 1)])) {
+        vh <- rr[[hr]]
+        if (!is.null(vh) && !is.na(vh) && nzchar(vh)) {
+          return(paste("NA //", vh))
+        }
+      }
+    }
+    return("NA")
+  }
+  tax_df[[taxa]] <- apply(tax_df, 1, fill_one)
+  
+  # Replace taxonomy in phyloseq with modified version
+  tax_table(ps) <- as.matrix(tax_df)
+  
+  # Collapse to the selected taxonomic rank (no ASV lost now)
+  ps <- tax_glom(ps, taxa)
+  
+  # Melt phyloseq object
+  sig.taxa.long <- psmelt(ps) %>%
+    arrange(Phylum) %>% 
+    mutate(row = row_number())
+  
+  sig.taxa.long$Abundance <- as.numeric(sig.taxa.long$Abundance)
+  sig.taxa.long$Taxa <- sig.taxa.long[, taxa]
+  
+  # Plot heatmap
+  ggplot(sig.taxa.long, aes(x = !!sym(X), y = reorder(Taxa, row))) +
+    {if(log.transform) geom_tile(aes(fill = log(Abundance)))} +
+    {if(!log.transform) geom_tile(aes(fill = Abundance))} +
+    scale_fill_distiller(palette = "OrRd", trans = "reverse") +
+    facet_grid(rows = vars(Phylum), scales = "free", space = "free") +
+    theme_light() +
+    theme(
+      strip.text.y = element_text(angle = 0),
+      panel.spacing = unit(0.02,'lines'),
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+    ) +
+    xlab("") + ylab("")
 }
 
 alpha_div_table <- function(ps, cols_to_keep, sample.size = NULL, metric = c("Observed", "Shannon", "Simpson")) {
@@ -597,9 +702,15 @@ alpha_div_table <- function(ps, cols_to_keep, sample.size = NULL, metric = c("Ob
   return(alpha_long)
 }
 
-#Plot alpha-diversity by all metrics
 plot_alpha <- function(alpha_table, X, colour) {
-  ggplot(alpha_table, aes_string(x = X, y = "Value", color = colour)) +
+  library(ggplot2)
+  library(rlang)
+  
+  # X and colour are expected as strings (e.g. "Treatment", "Group")
+  x_sym <- sym(X)
+  col_sym <- sym(colour)
+  
+  ggplot(alpha_table, aes(x = !!x_sym, y = Value, color = !!col_sym)) +
     geom_boxplot() +
     geom_point(position = position_dodge(0.75)) +
     facet_wrap(~Metric, scales = "free_y", nrow = 1) +
@@ -608,65 +719,146 @@ plot_alpha <- function(alpha_table, X, colour) {
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 }
 
-plot_heatmap <- function(ps, X, taxa = "Genus", log.transform = TRUE){
-  require(dplyr)
+
+# Plot beta-diversity
+beta_plot <- function(ps, method, distance, ...){
   require(phyloseq)
   require(ggplot2)
   
-  # Remove taxa with zero total abundance
-  ps <- prune_taxa(taxa_sums(ps) > 0, ps)
-  
-  tax_ranks <- colnames(ps@tax_table)
-  
-  # Prepare taxonomy as data.frame of characters
-  tax_df <- as.data.frame(ps@tax_table, stringsAsFactors = FALSE)
-  tax_df[] <- lapply(tax_df, function(x) if (is.factor(x)) as.character(x) else as.character(x))
-  
-  # Fill chosen rank with fallback "NA // <nearest higher rank>" BEFORE tax_glom
-  fill_one <- function(row_vec) {
-    rr <- as.list(row_vec)
-    val <- rr[[taxa]]
-    if (!is.null(val) && !is.na(val) && nzchar(val)) return(val)
-    
-    idx <- match(taxa, tax_ranks)
-    if (!is.na(idx) && idx > 1) {
-      for (hr in rev(tax_ranks[1:(idx - 1)])) {
-        vh <- rr[[hr]]
-        if (!is.null(vh) && !is.na(vh) && nzchar(vh)) {
-          return(paste("NA //", vh))
-        }
-      }
-    }
-    return("NA")
-  }
-  tax_df[[taxa]] <- apply(tax_df, 1, fill_one)
-  
-  # Replace taxonomy in phyloseq with modified version
-  tax_table(ps) <- as.matrix(tax_df)
-  
-  # Collapse to the selected taxonomic rank (no ASV lost now)
-  ps <- tax_glom(ps, taxa)
-  
-  # Melt phyloseq object
-  sig.taxa.long <- psmelt(ps) %>%
-    arrange(Phylum) %>% 
-    mutate(row = row_number())
-  
-  sig.taxa.long$Abundance <- as.numeric(sig.taxa.long$Abundance)
-  sig.taxa.long$Taxa <- sig.taxa.long[, taxa]
-  
-  # Plot heatmap
-  ggplot(sig.taxa.long, aes(x = !!sym(X), y = reorder(Taxa, row))) +
-    {if(log.transform) geom_tile(aes(fill = log(Abundance)))} +
-    {if(!log.transform) geom_tile(aes(fill = Abundance))} +
-    scale_fill_distiller(palette = "OrRd", trans = "reverse") +
-    facet_grid(rows = vars(Phylum), scales = "free", space = "free") +
+  ps.prop <- transform_sample_counts(ps, function(x) x/sum(x))
+  ords <- ordinate(ps.prop, method=method, distance=distance)
+  plot_ordination(ps.prop, ords, title=deparse(substitute(ps)), ...) +
+    geom_point(size=3, alpha=0.7) + 
     theme_light() +
-    theme(
-      strip.text.y = element_text(angle = 0),
-      panel.spacing = unit(0.02,'lines'),
-      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
-    ) +
-    xlab("") + ylab("")
+    ggtitle(distance)
 }
+
+
+deseq_sigtable <- function(ps, formula, baseMean = 20, log2FoldChange = 2, pairs = NULL){
+  require(DESeq2)
+  require(dplyr)
+  
+  ps <- prune_samples(sample_sums(ps) > 0, ps)
+  
+  # DESeq2 object
+  ds <- phyloseq_to_deseq2(ps, formula)
+  ds <- estimateSizeFactors(ds, type = "poscounts")
+  ds <- estimateDispersions(ds, fitType = "local")
+  ds <- DESeq(ds)
+  
+  # If there are pairs
+  if (!is.null(pairs)) {
+    if (length(pairs) != 2) {
+      stop("pairs must contain exactly 2 group names, e.g. c('no', 'half')")
+    }
+    res <- results(ds, contrast = c(all.vars(formula)[1], pairs[1], pairs[2]), cooksCutoff = FALSE)
+  } else {
+    res <- results(ds, cooksCutoff = FALSE)
+  }
+  
+  alpha <- 0.05
+  sigtab <- res[which(res$padj < alpha), ]
+  sigtab <- sigtab %>%
+    data.frame() %>%
+    dplyr::filter(baseMean >= baseMean &
+                    abs(log2FoldChange) >= log2FoldChange)
+  
+  print(nrow(sigtab))
+  if (nrow(sigtab) == 0) {
+    return(NULL)
+  }
+  
+  sigtab <- cbind(as(sigtab, "data.frame"),
+                  as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  
+  return(sigtab)
+}
+
+
+ancombc_sigtable <- function(ps, fix_formula, intercept = NA, pairwise = FALSE) {
+  require(ANCOMBC)
+  require(dplyr)
+  
+  ps@sam_data[[fix_formula]] <- factor(ps@sam_data[[fix_formula]])
+  
+  if (!is.na(intercept) && intercept != levels(ps@sam_data[[fix_formula]])[1]) {
+    ps@sam_data[[fix_formula]] <- factor(
+      ps@sam_data[[fix_formula]],
+      levels = c(intercept, setdiff(levels(ps@sam_data[[fix_formula]]), intercept))
+    )
+  }
+  
+  out <- ANCOMBC::ancombc2(
+    data = bact,
+    fix_formula = fix_formula,
+    rand_formula = NULL,
+    p_adj_method = "fdr",
+    pairwise = pairwise,
+    group = fix_formula
+  )
+  
+  return(out)
+}
+
+# plot_heatmap <- function(ps, X, taxa = "Genus", log.transform = TRUE){
+#   require(dplyr)
+#   require(phyloseq)
+#   require(ggplot2)
+#   
+#   # Remove taxa with zero total abundance
+#   ps <- prune_taxa(taxa_sums(ps) > 0, ps)
+#   
+#   tax_ranks <- colnames(ps@tax_table)
+#   
+#   # Prepare taxonomy as data.frame of characters
+#   tax_df <- as.data.frame(ps@tax_table, stringsAsFactors = FALSE)
+#   tax_df[] <- lapply(tax_df, function(x) if (is.factor(x)) as.character(x) else as.character(x))
+#   
+#   # Fill chosen rank with fallback "NA // <nearest higher rank>" BEFORE tax_glom
+#   fill_one <- function(row_vec) {
+#     rr <- as.list(row_vec)
+#     val <- rr[[taxa]]
+#     if (!is.null(val) && !is.na(val) && nzchar(val)) return(val)
+#     
+#     idx <- match(taxa, tax_ranks)
+#     if (!is.na(idx) && idx > 1) {
+#       for (hr in rev(tax_ranks[1:(idx - 1)])) {
+#         vh <- rr[[hr]]
+#         if (!is.null(vh) && !is.na(vh) && nzchar(vh)) {
+#           return(paste("NA //", vh))
+#         }
+#       }
+#     }
+#     return("NA")
+#   }
+#   tax_df[[taxa]] <- apply(tax_df, 1, fill_one)
+#   
+#   # Replace taxonomy in phyloseq with modified version
+#   tax_table(ps) <- as.matrix(tax_df)
+#   
+#   # Collapse to the selected taxonomic rank (no ASV lost now)
+#   ps <- tax_glom(ps, taxa)
+#   
+#   # Melt phyloseq object
+#   sig.taxa.long <- psmelt(ps) %>%
+#     arrange(Phylum) %>% 
+#     mutate(row = row_number())
+#   
+#   sig.taxa.long$Abundance <- as.numeric(sig.taxa.long$Abundance)
+#   sig.taxa.long$Taxa <- sig.taxa.long[, taxa]
+#   
+#   # Plot heatmap
+#   ggplot(sig.taxa.long, aes(x = !!sym(X), y = reorder(Taxa, row))) +
+#     {if(log.transform) geom_tile(aes(fill = log(Abundance)))} +
+#     {if(!log.transform) geom_tile(aes(fill = Abundance))} +
+#     scale_fill_distiller(palette = "OrRd", trans = "reverse") +
+#     facet_grid(rows = vars(Phylum), scales = "free", space = "free") +
+#     theme_light() +
+#     theme(
+#       strip.text.y = element_text(angle = 0),
+#       panel.spacing = unit(0.02,'lines'),
+#       axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+#     ) +
+#     xlab("") + ylab("")
+# }
 

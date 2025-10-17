@@ -27,8 +27,6 @@ set.seed(5678)
 
 # Read metadata
 
-`read_metadata(filename, sample.names, ...)`
-
 Read metadata, assign sample names as rownames (important for downstream analysis).
 
 
@@ -37,53 +35,17 @@ mdat <- read_metadata(filename = "16s_map.csv",
                       sample.names = "Filename",
                       sep = ",",
                       check_files = "16s_raw/")
-mdat
+mdat %>% head()
 ```
 
 ```
-##      Filename Type      Group          Treatment  Dosage
-## S246     S246  16S Experiment            Control control
-## S247     S247  16S Experiment            Control control
-## S248     S248  16S Experiment            Control control
-## S249     S249  16S Experiment            Control control
-## S250     S250  16S Experiment            Control control
-## S251     S251  16S Experiment            Control control
-## S255     S255  16S Experiment     Poultry manure  single
-## S256     S256  16S Experiment     Poultry manure  single
-## S257     S257  16S Experiment     Poultry manure  single
-## S258     S258  16S Experiment     Poultry manure  single
-## S259     S259  16S Experiment     Poultry manure  single
-## S260     S260  16S Experiment     Poultry manure  single
-## S264     S264  16S Experiment     Poultry manure  double
-## S265     S265  16S Experiment     Poultry manure  double
-## S266     S266  16S Experiment     Poultry manure  double
-## S267     S267  16S Experiment     Poultry manure  double
-## S268     S268  16S Experiment     Poultry manure  double
-## S269     S269  16S Experiment     Poultry manure  double
-## S273     S273  16S Experiment Rapid fermentation  single
-## S274     S274  16S Experiment Rapid fermentation  single
-## S275     S275  16S Experiment Rapid fermentation  single
-## S276     S276  16S Experiment Rapid fermentation  single
-## S277     S277  16S Experiment Rapid fermentation  single
-## S278     S278  16S Experiment Rapid fermentation  single
-## S282     S282  16S Experiment Rapid fermentation  double
-## S283     S283  16S Experiment Rapid fermentation  double
-## S284     S284  16S Experiment Rapid fermentation  double
-## S285     S285  16S Experiment Rapid fermentation  double
-## S286     S286  16S Experiment Rapid fermentation  double
-## S287     S287  16S Experiment Rapid fermentation  double
-## S291     S291  16S Experiment  Long fermentation  single
-## S292     S292  16S Experiment  Long fermentation  single
-## S293     S293  16S Experiment  Long fermentation  single
-## S294     S294  16S Experiment  Long fermentation  single
-## S295     S295  16S Experiment  Long fermentation  single
-## S296     S296  16S Experiment  Long fermentation  single
-## S300     S300  16S Experiment  Long fermentation  double
-## S301     S301  16S Experiment  Long fermentation  double
-## S302     S302  16S Experiment  Long fermentation  double
-## S303     S303  16S Experiment  Long fermentation  double
-## S304     S304  16S Experiment  Long fermentation  double
-## S305     S305  16S Experiment  Long fermentation  double
+##      Filename Type      Group Treatment  Dosage
+## S246     S246  16S Experiment   Control control
+## S247     S247  16S Experiment   Control control
+## S248     S248  16S Experiment   Control control
+## S249     S249  16S Experiment   Control control
+## S250     S250  16S Experiment   Control control
+## S251     S251  16S Experiment   Control control
 ```
 
 # ASV picking
@@ -92,7 +54,7 @@ Run DADA2 pipeline for 16S sequences.
 
 
 ``` r
-notified_reads_to_seqtable_16s <- notify_on_error(fun = reads_to_seqtable_16s, 
+notified_reads_to_seqtable_16s <- run_with_notification(fun = reads_to_seqtable_16s, 
                                           task_name = "16S ASV picking",
                                           notify_success = TRUE)
 
@@ -205,178 +167,6 @@ seqtab <- notified_reads_to_seqtable_16s(raw_files_path = "16s_raw",
 ```
 
 ```
-## 37 paired-reads (in 14 unique pairings) successfully merged out of 41 (in 16 pairings) input.
-```
-
-```
-## 38 paired-reads (in 12 unique pairings) successfully merged out of 45 (in 15 pairings) input.
-```
-
-```
-## 32 paired-reads (in 12 unique pairings) successfully merged out of 35 (in 14 pairings) input.
-```
-
-```
-## 43 paired-reads (in 11 unique pairings) successfully merged out of 52 (in 14 pairings) input.
-```
-
-```
-## 38 paired-reads (in 12 unique pairings) successfully merged out of 39 (in 13 pairings) input.
-```
-
-```
-## 26 paired-reads (in 12 unique pairings) successfully merged out of 28 (in 13 pairings) input.
-```
-
-```
-## 42 paired-reads (in 15 unique pairings) successfully merged out of 46 (in 17 pairings) input.
-```
-
-```
-## 26 paired-reads (in 11 unique pairings) successfully merged out of 36 (in 15 pairings) input.
-```
-
-```
-## 20 paired-reads (in 8 unique pairings) successfully merged out of 28 (in 10 pairings) input.
-```
-
-```
-## 36 paired-reads (in 11 unique pairings) successfully merged out of 43 (in 13 pairings) input.
-```
-
-```
-## 32 paired-reads (in 13 unique pairings) successfully merged out of 37 (in 16 pairings) input.
-```
-
-```
-## 30 paired-reads (in 8 unique pairings) successfully merged out of 33 (in 10 pairings) input.
-```
-
-```
-## 28 paired-reads (in 9 unique pairings) successfully merged out of 36 (in 12 pairings) input.
-```
-
-```
-## 39 paired-reads (in 11 unique pairings) successfully merged out of 42 (in 12 pairings) input.
-```
-
-```
-## 37 paired-reads (in 14 unique pairings) successfully merged out of 37 (in 14 pairings) input.
-```
-
-```
-## 36 paired-reads (in 9 unique pairings) successfully merged out of 52 (in 14 pairings) input.
-```
-
-```
-## 35 paired-reads (in 12 unique pairings) successfully merged out of 44 (in 14 pairings) input.
-```
-
-```
-## 57 paired-reads (in 16 unique pairings) successfully merged out of 65 (in 20 pairings) input.
-```
-
-```
-## 29 paired-reads (in 11 unique pairings) successfully merged out of 29 (in 11 pairings) input.
-```
-
-```
-## 24 paired-reads (in 9 unique pairings) successfully merged out of 26 (in 10 pairings) input.
-```
-
-```
-## 34 paired-reads (in 13 unique pairings) successfully merged out of 36 (in 14 pairings) input.
-```
-
-```
-## 28 paired-reads (in 11 unique pairings) successfully merged out of 33 (in 13 pairings) input.
-```
-
-```
-## 36 paired-reads (in 14 unique pairings) successfully merged out of 45 (in 19 pairings) input.
-```
-
-```
-## 41 paired-reads (in 13 unique pairings) successfully merged out of 52 (in 17 pairings) input.
-```
-
-```
-## 50 paired-reads (in 14 unique pairings) successfully merged out of 57 (in 17 pairings) input.
-```
-
-```
-## 43 paired-reads (in 12 unique pairings) successfully merged out of 50 (in 14 pairings) input.
-```
-
-```
-## 41 paired-reads (in 16 unique pairings) successfully merged out of 44 (in 17 pairings) input.
-```
-
-```
-## 33 paired-reads (in 10 unique pairings) successfully merged out of 37 (in 11 pairings) input.
-```
-
-```
-## 39 paired-reads (in 10 unique pairings) successfully merged out of 42 (in 11 pairings) input.
-```
-
-```
-## 29 paired-reads (in 11 unique pairings) successfully merged out of 31 (in 12 pairings) input.
-```
-
-```
-## 26 paired-reads (in 10 unique pairings) successfully merged out of 31 (in 13 pairings) input.
-```
-
-```
-## 52 paired-reads (in 18 unique pairings) successfully merged out of 53 (in 19 pairings) input.
-```
-
-```
-## 31 paired-reads (in 10 unique pairings) successfully merged out of 34 (in 11 pairings) input.
-```
-
-```
-## 37 paired-reads (in 13 unique pairings) successfully merged out of 37 (in 13 pairings) input.
-```
-
-```
-## 30 paired-reads (in 9 unique pairings) successfully merged out of 34 (in 10 pairings) input.
-```
-
-```
-## 34 paired-reads (in 17 unique pairings) successfully merged out of 42 (in 19 pairings) input.
-```
-
-```
-## 31 paired-reads (in 12 unique pairings) successfully merged out of 31 (in 12 pairings) input.
-```
-
-```
-## 44 paired-reads (in 14 unique pairings) successfully merged out of 44 (in 14 pairings) input.
-```
-
-```
-## 37 paired-reads (in 12 unique pairings) successfully merged out of 38 (in 13 pairings) input.
-```
-
-```
-## 55 paired-reads (in 17 unique pairings) successfully merged out of 57 (in 18 pairings) input.
-```
-
-```
-## 34 paired-reads (in 14 unique pairings) successfully merged out of 41 (in 16 pairings) input.
-```
-
-```
-## 31 paired-reads (in 9 unique pairings) successfully merged out of 35 (in 10 pairings) input.
-```
-
-```
-## Identified 0 bimeras out of 392 input sequences.
-```
-
-```
 ##      input filtered denoisedF denoisedR merged nonchim
 ## S246   100       96        49        43     37      37
 ## S247   100       89        47        48     38      38
@@ -423,7 +213,15 @@ seqtab <- notified_reads_to_seqtable_16s(raw_files_path = "16s_raw",
 ```
 
 ``` r
-# telegramNotify::send_telegram_file("16S_processing.txt")
+send_telegram_file("16S_processing.log")
+```
+
+```
+## Response [https://api.telegram.org/bot8070906504:AAHLUS70wr6hRCs00ARZUfiNaHiwNxpq0Sc/sendDocument]
+##   Date: 2025-09-25 13:05
+##   Status: 200
+##   Content-Type: application/json
+##   Size: 483 B
 ```
 
 # Taxonomic assignment
@@ -432,7 +230,7 @@ Assign taxonomy using SILVA database.
 
 
 ``` r
-notified_assign_taxonomy <- notify_on_error(fun = assign_taxonomy, 
+notified_assign_taxonomy <- run_with_notification(fun = assign_taxonomy, 
                                           task_name = "16S Taxonomy",
                                           notify_success = TRUE)
 

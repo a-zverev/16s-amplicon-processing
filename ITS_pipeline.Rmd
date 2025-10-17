@@ -56,7 +56,7 @@ trim_ITS_primers(raw_files_path = "its_raw/",
 Run DADA2 pipeline for ITS sequences.
 
 ```{r}
-notified_reads_to_seqtable_ITS <- notify_on_error(fun = reads_to_seqtable_ITS, 
+notified_reads_to_seqtable_ITS <- run_with_notification(fun = reads_to_seqtable_ITS, 
                                           task_name = "ITS ASV picking",
                                           notify_success = TRUE)
 
@@ -76,7 +76,7 @@ seqtab <- notified_reads_to_seqtable_ITS(raw_files_path = "its_raw/cutadapt/",
 Assign taxonomy using UNITE database.
 
 ```{r}
-notified_assign_taxonomy <- notify_on_error(fun = assign_taxonomy, 
+notified_assign_taxonomy <- run_with_notification(fun = assign_taxonomy, 
                                           task_name = "ITS Taxonomy",
                                           notify_success = TRUE)
 
@@ -90,7 +90,7 @@ taxa <- notified_assign_taxonomy(seqtab = seqtab,
 Combine ASV table, taxonomy, and metadata into a `phyloseq` object.
 
 ```{r}
-notified_assemble_phyloseq_ITS <- notify_on_error(fun = assemble_phyloseq_ITS, 
+notified_assemble_phyloseq_ITS <- run_with_notification(fun = assemble_phyloseq_ITS, 
                                           task_name = "Assembly of the phyloseq-object",
                                           notify_success = TRUE)
 

@@ -11,19 +11,6 @@ output:
 
 
 
-``` r
-# Load required libraries
-library(dada2)
-library(Biostrings)
-library(DECIPHER)
-library(phyloseq)
-library(tidyverse)
-library(telegramNotify) # custom notification package
-
-# Load helper functions
-source('functions.R')
-set.seed(5678)
-```
 
 # Read metadata
 
@@ -32,20 +19,9 @@ set.seed(5678)
 Read metadata, assign sample names as rownames (important for downstream analysis).
 
 
-``` r
-mdat <- read_metadata(filename = "its_map.csv",
-                      sample.names = "Filename",
-                      sep = ",",
-                      check_files = "its_raw/")
-```
-
 ```
 ## Warning in read_metadata(filename = "its_map.csv", sample.names = "Filename", :
 ## The following samples do not have 2 corresponding files in the directory: PE6
-```
-
-``` r
-mdat
 ```
 
 ```
@@ -98,13 +74,6 @@ mdat
 
 Use `cutadapt` to remove ITS primers.
 
-
-``` r
-trim_ITS_primers(raw_files_path = "its_raw/",
-                  FWD = "GTGARTCATCGARTCTTTG",     # gITS7
-                  REV = "TCCTCCGCTTATTGATATGC",    # ITS4
-                  cutadapt = "/home/anaconda/conda/envs/bioinf/bin/cutadapt")
-```
 
 ```
 ## Loading required package: ShortRead
@@ -199,23 +168,6 @@ trim_ITS_primers(raw_files_path = "its_raw/",
 # ASV picking
 
 Run DADA2 pipeline for ITS sequences.
-
-
-``` r
-notified_reads_to_seqtable_ITS <- notify_on_error(fun = reads_to_seqtable_ITS, 
-                                          task_name = "ITS ASV picking",
-                                          notify_success = TRUE)
-
-seqtab <- notified_reads_to_seqtable_ITS(raw_files_path = "its_raw/cutadapt/",
-                               trimLeft = c(0, 0),
-                               truncLen = c(0, 0),
-                               log_file = "its_processing.log",
-                               pool = "pseudo",
-                               cores = TRUE,
-                               maxEE = c(2, 5),
-                               pattern = c("_L2_1.fq.gz", "_L2_2.fq.gz"),
-                               plot_profile = TRUE)
-```
 
 ![](ITS_pipeline_files/figure-html/unnamed-chunk-4-1.png)<!-- -->![](ITS_pipeline_files/figure-html/unnamed-chunk-4-2.png)<!-- -->
 
@@ -530,16 +482,6 @@ seqtab <- notified_reads_to_seqtable_ITS(raw_files_path = "its_raw/cutadapt/",
 Assign taxonomy using UNITE database.
 
 
-``` r
-notified_assign_taxonomy <- notify_on_error(fun = assign_taxonomy, 
-                                          task_name = "ITS Taxonomy",
-                                          notify_success = TRUE)
-
-taxa <- notified_assign_taxonomy(seqtab = seqtab, 
-                        set_train_path = '~/tax_n_refs/sh_general_release_dynamic_s_all_04.04.2024.fasta',
-                        cores = TRUE)
-```
-
 ```
 ## UNITE fungal taxonomic reference detected.
 ```
@@ -548,16 +490,6 @@ taxa <- notified_assign_taxonomy(seqtab = seqtab,
 
 Combine ASV table, taxonomy, and metadata into a `phyloseq` object.
 
-
-``` r
-notified_assemble_phyloseq_ITS <- notify_on_error(fun = assemble_phyloseq_ITS, 
-                                          task_name = "Assembly of the phyloseq-object",
-                                          notify_success = TRUE)
-
-ps <- notified_assemble_phyloseq_ITS(seqtab = seqtab, 
-                        metadata = mdat,
-                        taxonomy = taxa)
-```
 
 ```
 ## UNITE-style prefixes detected. Removing prefixes (e.g., 'k__', 'p__', etc.)...
@@ -568,25 +500,17 @@ ps <- notified_assemble_phyloseq_ITS(seqtab = seqtab,
 ```
 
 ```
-## ASVs removed due to non-Fungi Kingdom or NA: 24
+## ASVs removed due to non-Fungi Kingdom or NA: 27
 ```
 
 ```
-## Final number of ASVs: 143
-```
-
-``` r
-saveRDS(ps, "fungi.RData")
+## Final number of ASVs: 140
 ```
 
 # Basic stats
 
 Explore the dataset: number of taxa, reads per sample, taxonomy and ASV tables. Save `phyloseq` object to `.RData` file.
 
-
-``` r
-sample_names(ps) # Names of samples
-```
 
 ```
 ##  [1] "PE10" "PE11" "PE15" "PE16" "PE17" "PE18" "PE19" "PE20" "PE24" "PE25"
@@ -596,21 +520,13 @@ sample_names(ps) # Names of samples
 ## [41] "PE8"  "PE9"
 ```
 
-``` r
-sample_sums(ps)  # Number of reads per sample
-```
-
 ```
 ## PE10 PE11 PE15 PE16 PE17 PE18 PE19 PE20 PE24 PE25 PE26 PE27 PE28 PE29 PE33 PE34 
-##   22   64   26   16   37   56   71   39   76   58   22   69   56   58   21   70 
+##   15   61   20   21   37   56   73   39   76   57   23   63   58   56   21   70 
 ## PE35 PE36 PE37 PE38 PE42 PE43 PE44 PE45 PE46 PE47 PE51 PE52 PE53 PE54 PE55 PE56 
-##   64   59   68   52   71   66   67   76   87   52   21   61   80   54   69   51 
+##   64   59   69   70   71   66   67   76   87   55   21   61   80   10   67   56 
 ##  PE6 PE60 PE61 PE62 PE63 PE64 PE65  PE7  PE8  PE9 
-##   37   59   73   67   76   72   32   66   31   42
-```
-
-``` r
-tax_table(ps)[1:5, 1:4] # First rows of taxonomy table
+##   38   59   72   67   77   73   32   66   29   42
 ```
 
 ```
@@ -623,10 +539,6 @@ tax_table(ps)[1:5, 1:4] # First rows of taxonomy table
 ## ASV5 "Fungi" "Ascomycota"    "Sordariomycetes" "Sordariales"
 ```
 
-``` r
-otu_table(ps)[1:4, 1:5] # First rows of ASV table
-```
-
 ```
 ## OTU Table:          [5 taxa and 4 samples]
 ##                      taxa are columns
@@ -635,10 +547,6 @@ otu_table(ps)[1:4, 1:5] # First rows of ASV table
 ## PE11    0   43    0    0    3
 ## PE15    3    0    0    0    0
 ## PE16    0    0    0    1    0
-```
-
-``` r
-ps@sam_data # Metadata
 ```
 
 ```

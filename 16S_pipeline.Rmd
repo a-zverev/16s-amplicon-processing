@@ -43,7 +43,7 @@ mdat %>% head()
 Run DADA2 pipeline for 16S sequences.
 
 ```{r message=FALSE, warning=FALSE}
-notified_reads_to_seqtable_16s <- notify_on_error(fun = reads_to_seqtable_16s, 
+notified_reads_to_seqtable_16s <- run_with_notification(fun = reads_to_seqtable_16s, 
                                           task_name = "16S ASV picking",
                                           notify_success = TRUE)
 
@@ -65,7 +65,7 @@ send_telegram_file("16S_processing.log")
 Assign taxonomy using SILVA database.
 
 ```{r}
-notified_assign_taxonomy <- notify_on_error(fun = assign_taxonomy, 
+notified_assign_taxonomy <- run_with_notification(fun = assign_taxonomy, 
                                           task_name = "16S Taxonomy",
                                           notify_success = TRUE)
 

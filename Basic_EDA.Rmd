@@ -1,181 +1,150 @@
 ---
 title: "Basic_EDA"
-author: "Aleksei Zverev"
-date: "2023-06-02"
 output: 
   html_document: 
     keep_md: yes
+    toc: yes
+    toc_float: yes
+    toc_collapsed: yes
 ---
 
 ```{r setup, include=TRUE, warning = FALSE, message = FALSE}
 knitr::opts_chunk$set(fig.width = 14, fig.height = 8)
  
 
-library('phyloseq')
-library('tidyverse')
-library('ggVennDiagram')
+source("functions.R")
 
 
 set.seed(5678)
 setwd('~/Analysis/16s-amplicon-processing/')
-ps <- readRDS("ps.RData")
-ps
+
+
+
+bact <- readRDS("bact.RData")
+bact
+fungi <- readRDS("fungi.RData")
+fungi
 ```
 
-## Brief view on samples
+## Save ASVs table at different levels
 
 ```{r}
-sample_sums(ps) %>% sort()
-taxa_sums(ps) %>% log() %>%  hist()
-ps@sam_data[1:8,]
+bact %>% tax_table() %>% colnames()
+
+write_ASVs_table(bact, "tables/ASVs_abs_abundances_bact.csv")
+write_ASVs_table(bact, "tables/genus_abs_abundances_bact.csv", tax_level = "Genus")
+write_ASVs_table(bact, "tables/Phylum_abs_abundances_bact.csv", tax_level = "Phylum")
+
+
+write_ASVs_table(fungi %>% rarefy_even_depth(verbose = F), "tables/ASVs_raref_abundances_fungi.csv")
+write_ASVs_table(fungi %>% rarefy_even_depth(verbose = F), "tables/genus_raref_abundances_fungi.csv", tax_level = "Genus")
+write_ASVs_table(fungi %>% rarefy_even_depth(verbose = F), "tables/Phylum_raref_abundances_fungi.csv", tax_level = "Phylum")
 ```
 
 
 ## Plot barplots
 
 ```{r}
-# Draw barplot of relative abundance by taxa level
-bargraph <- function(ps, rank, threshold=0.05, percents=FALSE){
-  require(dplyr)
-  require(ggplot2)
-  require(phyloseq)
-  
-  ps <- prune_taxa(taxa_sums(ps) > 0, ps)
-  ps2 <- tax_glom(ps, taxrank = rank)
-  ps3 = transform_sample_counts(ps2, function(x) x / sum(x) )
-  data <- psmelt(ps3) # create dataframe from phyloseq object
-  data$Plot <- as.character(data[,rank]) # convert to character
-  data$Plot[data$Abundance < threshold] <- paste0("<", threshold, " abund.")
-  medians <- data %>% group_by(Plot) %>% mutate(median=median(data$Abundance))
-  remainder <- medians[medians$median <= threshold,]$Plot
-  data$Percentage = ifelse(data$Plot != paste0("<", threshold, " abund."),
-                           round(data$Abundance, 3)*100, NA)
-  
-  # create palette long enough for our data
-  base.palette <- c("darkblue", "darkgoldenrod1", "darkseagreen", "darkorchid", "darkolivegreen1", "lightskyblue", 
-                    "darkgreen", "deeppink", "khaki2", "firebrick", "brown1", "darkorange1", "cyan1", "royalblue4", 
-                    "darksalmon", "dodgerblue3", "steelblue1", "darkgoldenrod1", "brown1", "cyan1", "darkgrey")
-  required.colors <- nlevels(factor(data$Plot))
-  repeats = required.colors %/% length(base.palette) + 1
-  palette <- rep(base.palette, length.out = repeats * length(base.palette))
-  
-  ggplot(data=data, aes(x=Sample, y=Abundance, fill=Plot)) +
-    geom_bar(stat="identity", position="stack") + 
-    theme_light() +
-    guides() +
-    scale_fill_manual(values = palette) +
-    scale_y_continuous(limits = c(0,1), 
-                       expand = expansion(mult = c(.01, .01))) +
-    ylab("Relative Abundance") +
-    xlab("Samples") +
-    theme(legend.position="bottom",
-          axis.text.x = element_blank(),
-          axis.ticks.x = element_blank()) +
-    if (percents) {
-      geom_text(aes(label = Percentage),
-                position = position_stack(vjust = 0.5), size = 1.5)
-    }
-}
+bargraph(ps = bact, rank = "Phylum", threshold = 0.05, percents = T) +
+  facet_grid(cols = vars(Treatment, Dosage), scales = "free", space = "free")
+# ggsave("bars.tiff", units="in", width=12, height=8, dpi=300, compression = 'lzw')
 
-bargraph(ps, "Phylum", 0.02) +
-  facet_grid(cols = vars(Group, BioRepeat), scales = "free", space = "free")
+
+bargraph(ps = fungi, rank = "Class", threshold = 0.05, percents = T) +
+  facet_grid(cols = vars(Treatment, Dosage), scales = "free", space = "free")
 # ggsave("bars.tiff", units="in", width=12, height=8, dpi=300, compression = 'lzw')
 ```
 
 ## Heatmap
 
 ```{r fig.height=18}
-plot_heatmap <- function(ps, taxa = "Genus", log.transform = TRUE){
-  require(dplyr)
-  require(phyloseq)
-  require(ggplot2)
-  
-  ps <- prune_taxa(taxa_sums(ps) > 0, ps)
-  ps <- tax_glom(ps, taxa)
-  sig.taxa.long <- psmelt(ps) %>%
-    arrange(Phylum) %>% 
-    mutate(row = row_number())
-  
-  sig.taxa.long$Abundance <- as.numeric(sig.taxa.long$Abundance)
-  sig.taxa.long$Taxa <- sig.taxa.long[,taxa]
-  
-  sig.taxa.long[sig.taxa.long == "Burkholderia-Caballeronia-Paraburkholderia"] <- "Burkholderia"
-  sig.taxa.long[sig.taxa.long == "Allorhizobium-Neorhizobium-Pararhizobium-Rhizobium"] <- "Pararhizobium"
-  
-  ggplot(sig.taxa.long, aes(x = SampleID, y = reorder(Taxa, row))) +
-    {if(log.transform) geom_tile(aes(fill=log(Abundance)))} +
-    {if(!log.transform) geom_tile(aes(fill=Abundance))} +
-    scale_fill_distiller(palette = "OrRd", trans = "reverse") +
-    facet_grid(rows = vars(Phylum), scales = "free", space = "free") +
-    theme_light() +
-    theme(strip.text.y = element_text(angle = 0),
-          panel.spacing = unit(0.02,'lines'),
-          axis.text.x = element_blank(),
-          axis.ticks.x = element_blank()) +
-    xlab("") + ylab("")
-}
-
-
-ps.major <- prune_taxa(taxa_sums(ps) > 100, ps)
-
-plot_heatmap(ps.major, taxa = "Family") + 
+plot_heatmap(ps = bact, X = "Filename", taxa = "Family", log.transform = T) + 
   facet_grid(rows = vars(Phylum), 
-             cols = vars(Group, BioRepeat), scales = "free", space = "free")
+             cols = vars(Treatment, Dosage), scales = "free", space = "free")
+
+
+plot_heatmap(ps = fungi, X = "Filename", taxa = "Family", log.transform = F) + 
+  facet_grid(rows = vars(Phylum), 
+             cols = vars(Treatment, Dosage), scales = "free", space = "free")
 ```
 
 ## Alpha-diversity
 
 ```{r}
-# Calculate several alpha-diversity indexes, return one dataframe
-alpha_div_table <- function(ps, metric, cols_to_keep){
-  require(phyloseq)
-  
-  ps <- prune_taxa(taxa_sums(ps) > 0, ps)
-  ps <- rarefy_even_depth(ps)
-  obs_sim <- estimate_richness(ps, split = TRUE, measures = metric)
-  alpha <- cbind(sample_data(ps)[,cols_to_keep], obs_sim)
-  alpha %>% 
-    pivot_longer(all_of(metric), names_to = "Metric")
-}
+sample_sums(bact)
+alpha.bact <- alpha_div_table(ps = bact, 
+                              cols_to_keep = c("Treatment", "Dosage"),
+                              sample.size = 24, # can be NULL - rarefaction to the minimum
+                              metric = c("Observed", "Shannon", "Simpson", "Chao1"))
+alpha.bact %>% head() # also there are PD and MPD
 
 
-sample_sums(ps) %>% sort()
-ps.raref <- rarefy_even_depth(ps)
-alpha <- alpha_div_table(ps.raref, 
-                         metric = c("Observed", "Simpson"),
-                         cols_to_keep = c("Group", "BioRepeat"))
-alpha
-
-ggplot(alpha, aes(Group, value)) +
-  geom_point(aes(color = BioRepeat)) +
-  facet_wrap(~Metric, scales = "free_y")+
-  theme_light() +
-  xlab("") + ylab("")
+sample_sums(fungi)
+alpha.fungi <- alpha_div_table(ps = fungi, 
+                              cols_to_keep = c("Treatment", "Dosage"))
+alpha.fungi %>% head() # default indices
 ```
+
+```{r}
+plot_alpha(alpha_table = alpha.bact,
+           X = "Treatment",
+           colour = "Dosage")
+
+
+plot_alpha(alpha_table = alpha.fungi,
+           X = "Treatment",
+           colour = "Dosage")
+```
+
 
 ## Beta-diversity
 
 ```{r}
-# Plot beta-diversity
-beta_plot <- function(ps, method, distance, ...){
-  require(phyloseq)
-  require(ggplot2)
-  
-  ps.prop <- transform_sample_counts(ps, function(x) x/sum(x))
-  ords <- ordinate(ps.prop, method=method, distance=distance)
-  plot_ordination(ps.prop, ords, title=deparse(substitute(ps)), ...) +
-    geom_point(size=3, alpha=0.7) + 
-    theme_light() +
-    ggtitle(distance)
-}
-
-beta_plot(ps,
+beta_plot(bact,
           method = "PCoA", distance = "bray", 
-          color="Group", shape = "BioRepeat")
+          color="Treatment", shape = "Dosage")
+
+beta_plot(fungi,
+          method = "PCoA", distance = "bray", 
+          color="Treatment", shape = "Dosage")
 ```
 
-## Ideas to check
 
-1.
-2.
-3.
+## Relative abundance analysis
+
+```{r}
+full.bact <- readRDS("~/Soil_Institute/2025_Poultry/ps.16s.RData") %>%
+  subset_samples(Group %in% c("Experiment") & (Treatment %in% c("Control", "Poultry_manure_single", "Poultry_manure_double")))
+```
+
+
+```{r message=FALSE, warning=FALSE}
+deseq_sigtable(ps = full.bact, 
+          formula = ~Treatment,
+          baseMean = 20,
+          log2FoldChange = 2)
+
+deseq_sigtable(ps = full.bact, 
+          formula = ~Treatment,
+          baseMean = 20,
+          log2FoldChange = 2,
+          pairs = c("Control", "Poultry_manure_single"))
+
+deseq_sigtable(ps = full.bact, 
+          formula = ~Treatment,
+          baseMean = 20,
+          log2FoldChange = 2,
+          pairs = c("Poultry_manure_single", "Poultry_manure_double"))
+```
+
+```{r message=FALSE, warning=FALSE}
+ancombc_sigtable(ps = full.bact,
+                 fix_formula = "Treatment")
+
+ancombc_sigtable(ps = full.bact,
+                 fix_formula = "Treatment",
+                 intercept = "Control",
+                 pairwise = T)
+
+```
+
